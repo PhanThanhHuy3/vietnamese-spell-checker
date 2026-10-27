@@ -19,30 +19,12 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.noise_generator import VietnameseNoiseGenerator
+from src.smart_corrector import SmartVietnameseCorrector
 
-# Kiểm tra xem PyTorch và Transformers đã sẵn sàng cho mô hình Deep Learning chưa
-AI_MODEL_AVAILABLE = False
-corrector_pipeline = None
-
-try:
-    import torch
-    from src.inference import SpellInferencePipeline
-    from src.utils.helpers import load_config
-
-    config = load_config("configs/config.yaml")
-    best_model_path = Path(config["training"]["output_dir"]) / "best_model"
-    model_to_load = str(best_model_path) if best_model_path.exists() else config["model"]["name_or_path"]
-
-    # Khởi tạo pipeline nếu có PyTorch
-    corrector_pipeline = SpellInferencePipeline(model_dir_or_name=model_to_load)
-    AI_MODEL_AVAILABLE = True
-except Exception as e:
-    # Nếu chưa cài PyTorch hoặc chưa download model, Web UI vẫn hoạt động mượt mà
-    AI_MODEL_AVAILABLE = False
-    _ai_error_msg = str(e)
-
-# Khởi tạo bộ sinh lỗi
+# Khởi tạo bộ sửa lỗi thông minh và bộ sinh lỗi
+smart_corrector = SmartVietnameseCorrector()
 noise_gen = VietnameseNoiseGenerator(seed=42)
+AI_MODEL_AVAILABLE = smart_corrector.use_ai
 
 # ==============================================================================
 # HTML / CSS / JS GIAO DIỆN HIỆN ĐẠI
@@ -744,9 +726,9 @@ class SpellCheckerRequestHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/api/status":
             self._set_headers(200, "application/json")
             status_data = {
-                "ai_available": AI_MODEL_AVAILABLE,
-                "device": str(getattr(corrector_pipeline, "device", "CPU")) if AI_MODEL_AVAILABLE else "N/A",
-                "model_name": getattr(corrector_pipeline.corrector, "model_name_or_path", "ViT5") if AI_MODEL_AVAILABLE else "Rule-based Fallback",
+                "ai_available": smart_corrector.use_ai,
+                "engine": "ViT5 Deep Learning" if smart_corrector.use_ai else "Smart Vietnamese Rule & Phonetic Engine",
+                "device": "CUDA/CPU" if smart_corrector.use_ai else "N/A",
             }
             self.wfile.write(json.dumps(status_data, ensure_ascii=False).encode("utf-8"))
         else:
@@ -779,47 +761,7 @@ class SpellCheckerRequestHandler(http.server.BaseHTTPRequestHandler):
         # 2. API SỬA LỖI (SPELL CHECKER)
         elif parsed.path == "/api/correct_spelling":
             text = req.get("text", "")
-
-            if AI_MODEL_AVAILABLE and corrector_pipeline:
-                result = corrector_pipeline.predict(text)
-            else:
-                # Heuristic / quy tắc cơ bản khi chưa có weights ViT5
-                corrected = text
-                # Một số sửa lỗi quy tắc mẫu cho demo
-                rule_fixes = {
-                    "chời": "trời", "dất": "rất", "xạch xẽ": "sạch sẽ",
-                    "sasch": "sách", "hok": "học", "qúa": "quá", "quến": "quên",
-                    "ngồii": "ngồi", "đocj": "đọc", "tieng viet": "tiếng Việt",
-                    "truong dai hoc": "trường đại học", "bach khoa": "Bách Khoa",
-                    "ha noi": "Hà Nội", "dao tao": "đào tạo", "ki su": "kỹ sư", "gioi": "giỏi",
-                }
-                for err, fix in rule_fixes.items():
-                    corrected = corrected.replace(err, fix)
-
-                # Tìm diffs
-                import difflib
-                orig_words = text.split()
-                corr_words = corrected.split()
-                matcher = difflib.SequenceMatcher(None, orig_words, corr_words)
-                diffs = []
-                for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-                    if tag != "equal":
-                        diffs.append({
-                            "type": tag,
-                            "original_segment": " ".join(orig_words[i1:i2]),
-                            "corrected_segment": " ".join(corr_words[j1:j2]),
-                            "original_indices": (i1, i2),
-                            "corrected_indices": (j1, j2),
-                        })
-
-                result = {
-                    "original_text": text,
-                    "corrected_text": corrected,
-                    "has_error": len(diffs) > 0,
-                    "errors_found": diffs,
-                    "mode": "heuristic_fallback",
-                }
-
+            result = smart_corrector.check_and_correct(text)
             self._set_headers(200)
             self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
         else:
