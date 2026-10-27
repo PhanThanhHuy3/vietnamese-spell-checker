@@ -1,0 +1,31 @@
+# Deep Learning & Transformers
+torch>=2.0.0
+transformers>=4.35.0
+datasets>=2.14.0
+accelerate>=0.24.0
+evaluate>=0.4.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# Vietnamese Text Processing & Normalization
+regex>=2023.10.3
+pyvi>=0.1.1
+underthesea>=6.8.0
+
+# Evaluation Metrics
+jiwer>=3.0.3
+scikit-learn>=1.3.0
+
+# Utilities & Configuration
+pyyaml>=6.0.1
+tqdm>=4.66.0
+rich>=13.6.0
+pydantic>=2.4.0
+
+# Experiment Tracking & Visualizations
+matplotlib>=3.8.0
+seaborn>=0.13.0
+tensorboard>=2.15.0
+
+# Optional: Interactive Demo UI
+gradio>=4.0.0

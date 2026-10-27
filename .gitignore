@@ -1,0 +1,74 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDE and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and Models (Keep structure, exclude heavy binaries)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/synthetic/*
+!data/synthetic/.gitkeep
+
+checkpoints/*
+!checkpoints/.gitkeep
+saved_models/*
+!saved_models/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Weights and Biases / WandB / Tensorboard
+wandb/
+runs/
+
+# HuggingFace & PyTorch cache
+.cache/
+huggingface/
+*.pt
+*.bin
+*.safetensors
+*.onnx
+
+# Environment variables
+.env
+.env.local

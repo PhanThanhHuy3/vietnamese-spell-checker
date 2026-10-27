@@ -1,0 +1,47 @@
+# Cấu hình dự án Sửa lỗi chính tả Tiếng Việt (Vietnamese Spelling Corrector)
+
+project_name: "vietnamese-spell-checker"
+seed: 42
+
+# 1. Cấu hình Model
+model:
+  name_or_path: "VietAI/vit5-base"  # Các lựa chọn: VietAI/vit5-base, VietAI/vit5-large, vinai/phobert-base-v2
+  model_type: "seq2seq"             # "seq2seq" cho ViT5 hoặc "token_classification" cho PhoBERT
+  max_source_length: 128
+  max_target_length: 128
+
+# 2. Cấu hình Dữ liệu
+data:
+  train_file: "data/processed/train.jsonl"
+  val_file: "data/processed/val.jsonl"
+  test_file: "data/processed/test.jsonl"
+  raw_file: "data/raw/raw_corpus.txt"
+  synthetic_output_dir: "data/synthetic"
+  noise_prob: 0.3                   # Tỷ lệ từ bị tạo lỗi khi sinh dữ liệu nhân tạo
+
+# 3. Cấu hình Huấn luyện (Training Hyperparameters)
+training:
+  output_dir: "checkpoints/vit5_spelling_corrector"
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  num_train_epochs: 5
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  gradient_accumulation_steps: 2
+  warmup_ratio: 0.1
+  fp16: false                       # Đổi thành true nếu chạy GPU có hỗ trợ mixed precision
+  logging_steps: 50
+  eval_strategy: "steps"            # "steps" hoặc "epoch"
+  eval_steps: 500
+  save_strategy: "steps"
+  save_steps: 500
+  save_total_limit: 2
+  load_best_model_at_end: true
+  metric_for_best_model: "exact_match"
+  greater_is_better: true
+
+# 4. Cấu hình Sinh từ (Inference / Generation)
+generation:
+  num_beams: 4
+  max_length: 128
+  early_stopping: true
