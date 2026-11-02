@@ -296,6 +296,11 @@ PHRASE_PATTERNS = [
     (r"\bvẽ\s+vang\b", "vẻ vang"),
 
     # Thời tiết & Đời sống
+    (r"\b(và|va)\s+xó\b", "và có"),
+    (r"\bva\s+có\b", "và có"),
+    (r"\bse\s+lạnn\b", "se lạnh"),
+    (r"\bxó\s+(mưa|thể|nhiều|tiền|người|tác\s+dụng|ích|lợi|việc)\b", r"có \1"),
+    (r"\bva\b(?!\s+(chạm|quẹt|đập|vào|phải))", "và"),
     (r"\bthời\s+tiếc\b", "thời tiết"),
     (r"\bxe\s+lạnh\b", "se lạnh"),
     (r"\bmưa\s+fùn\b", "mưa phùn"),
