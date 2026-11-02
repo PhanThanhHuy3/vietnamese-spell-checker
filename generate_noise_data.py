@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--config", type=str, default="configs/config.yaml", help="Đường dẫn file cấu hình")
     parser.add_argument("--input_file", type=str, default=None, help="File text chứa các câu tiếng Việt sạch")
     parser.add_argument("--noise_prob", type=float, default=None, help="Tỷ lệ gây nhiễu mỗi từ")
+    parser.add_argument("--num_variants", type=int, default=4, help="Số biến thể lỗi sinh ra cho mỗi câu")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -69,20 +70,34 @@ def main():
     # Đọc dữ liệu sạch
     synthesizer = VietnameseNoiseSynthesizer(seed=config.get("seed", 42))
     dataset_pairs = []
+    sample_id = 0
 
     with open(input_file, "r", encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            clean_text = normalize_vietnamese_text(line)
-            if not clean_text:
-                continue
+        lines = [line.strip() for line in f if line.strip()]
 
-            # Sinh câu bị lỗi
-            noisy_text = synthesizer.add_noise(clean_text, noise_prob=noise_prob)
+    for line in lines:
+        clean_text = normalize_vietnamese_text(line)
+        if not clean_text:
+            continue
+
+        # 1. Thêm mẫu sạch nguyên bản (identity mapping để tránh sửa quá đà)
+        dataset_pairs.append({
+            "id": f"sample_{sample_id:05d}",
+            "input_text": clean_text,
+            "target_text": clean_text,
+        })
+        sample_id += 1
+
+        # 2. Sinh các biến thể lỗi đa dạng
+        for v in range(args.num_variants):
+            cur_prob = min(0.45, noise_prob + (v * 0.05))
+            noisy_text = synthesizer.add_noise(clean_text, noise_prob=cur_prob)
             dataset_pairs.append({
-                "id": f"sample_{idx:05d}",
+                "id": f"sample_{sample_id:05d}",
                 "input_text": noisy_text,
                 "target_text": clean_text,
             })
+            sample_id += 1
 
     logger.info(f"Tổng số mẫu đã tạo: {len(dataset_pairs)}")
 

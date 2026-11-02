@@ -433,12 +433,16 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                 <textarea id="clean-text" placeholder="Nhập một câu tiếng Việt chuẩn để tạo lỗi nhân tạo...">Hôm nay trời rất trong xanh, tôi ngồi đọc sách nghiên cứu về tiếng Việt tại thư viện.</textarea>
 
-                <div class="samples">
-                    <span class="sample-label">Gợi ý mẫu:</span>
-                    <span class="sample-pill" onclick="setCleanSample(1)">Bách Khoa</span>
-                    <span class="sample-pill" onclick="setCleanSample(2)">Học sâu AI</span>
-                    <span class="sample-pill" onclick="setCleanSample(3)">Thời tiết mùa đông</span>
-                    <span class="sample-pill" onclick="setCleanSample(4)">Phương ngữ & Dấu</span>
+                <div class="samples" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem;">
+                    <span class="sample-label">Gợi ý câu sạch mẫu:</span>
+                    <span class="sample-pill" onclick="setCleanSample(1)">🍲 Nấu ăn & tiết kiệm</span>
+                    <span class="sample-pill" onclick="setCleanSample(2)">⭐ Sở thích tiếng Anh</span>
+                    <span class="sample-pill" onclick="setCleanSample(3)">🌧️ Nghỉ học vì mưa</span>
+                    <span class="sample-pill" onclick="setCleanSample(4)">🏛️ ĐH Bách Khoa</span>
+                    <span class="sample-pill" onclick="setCleanSample(5)">🤖 Học sâu & Nơ-ron</span>
+                    <span class="sample-pill" onclick="setCleanSample(6)">📚 Đọc truyện tranh</span>
+                    <span class="sample-pill" onclick="setCleanSample(7)">❄️ Thời tiết miền Bắc</span>
+                    <span class="sample-pill" onclick="setCleanSample(8)">📖 Thư viện thành phố</span>
                 </div>
 
                 <label>Tuỳ chọn quy luật sinh lỗi:</label>
@@ -496,11 +500,16 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                 <textarea id="corrupt-text" placeholder="Nhập câu có chứa lỗi chính tả...">Hôm nai chời mưa to qúa, tôi quến mang ô đi hok.</textarea>
 
-                <div class="samples">
-                    <span class="sample-label">Câu lỗi mẫu:</span>
-                    <span class="sample-pill" onclick="setCorruptSample(1)">Lỗi telex dính đuôi</span>
-                    <span class="sample-pill" onclick="setCorruptSample(2)">Lỗi vùng miền ch/tr, s/x</span>
-                    <span class="sample-pill" onclick="setCorruptSample(3)">Lỗi phím lân cận & mất dấu</span>
+                <div class="samples" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem;">
+                    <span class="sample-label">Gợi ý câu lỗi mẫu:</span>
+                    <span class="sample-pill" onclick="setCorruptSample(1)">🍲 Nấu ăn & tiết kiệm</span>
+                    <span class="sample-pill" onclick="setCorruptSample(2)">⭐ Sở thích tiếng Anh</span>
+                    <span class="sample-pill" onclick="setCorruptSample(3)">🌧️ Nghỉ học vì mưa</span>
+                    <span class="sample-pill" onclick="setCorruptSample(4)">🏛️ ĐH Bách Khoa</span>
+                    <span class="sample-pill" onclick="setCorruptSample(5)">🤖 Học sâu & Nơ-ron</span>
+                    <span class="sample-pill" onclick="setCorruptSample(6)">💬 Teencode & Thích đọc</span>
+                    <span class="sample-pill" onclick="setCorruptSample(7)">❄️ Thời tiết miền Bắc</span>
+                    <span class="sample-pill" onclick="setCorruptSample(8)">📚 Đọc sách thư viện</span>
                 </div>
 
                 <div style="background:#0d121f; border:1px solid var(--card-border); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1.25rem;">
@@ -551,16 +560,25 @@ HTML_CONTENT = """<!DOCTYPE html>
         }
 
         const cleanSamples = {
-            1: "Trường đại học Bách Khoa có bề dày lịch sử và truyền thống vẻ vang.",
-            2: "Mô hình học sâu và mạng nơ-ron biến đổi cách con người giải quyết bài toán phức tạp.",
-            3: "Thời tiết miền Bắc đang bước vào những ngày đầu đông se lạnh và có mưa phùn nhẹ.",
-            4: "Tôi rất thích đọc sách nghiên cứu ngôn ngữ, giữ gìn sự trong sáng của tiếng Việt."
+            1: "Tối nay tôi tự nấu ăn ở nhà để tiết kiệm tiền.",
+            2: "Sở thích của tôi là học tiếng Anh và nghiên cứu trí tuệ nhân tạo.",
+            3: "Hôm nay tôi không đi học vì trời mưa to.",
+            4: "Trường đại học Bách Khoa có bề dày lịch sử và truyền thống vẻ vang.",
+            5: "Mô hình học sâu và mạng nơ-ron biến đổi cách con người giải quyết bài toán phức tạp.",
+            6: "Tôi rất thích đọc truyện tranh và nghe nhạc vào buổi chiều tối.",
+            7: "Thời tiết miền Bắc mùa đông se lạnh và có mưa phùn nhẹ.",
+            8: "Hôm nay trời rất trong xanh, tôi ngồi đọc sách tại thư viện thành phố."
         };
 
         const corruptSamples = {
-            1: "Hôm nay tôi ngồii đocj sasch tại thư viện thành phố.",
-            2: "Chời hôm nay dất trong xanh, xạch xẽ và thoáng mát.",
-            3: "truong dai hoc bach khoa ha noi dao tao ki su gioi."
+            1: "Tối nay6 tôi tự nấu ăn ở nhà để tiet kiệm fiền",
+            2: "sở thích của tôu là học tiếng anh",
+            3: "Hôm nayw tôi không đi họt đi trời jưa",
+            4: "Trường dạy học Bách Khoa co về dày lịch sử và truyền thongw vẽ vang.",
+            5: "Mô hình uọc sâu cà ma5ng nơ-ronj biên đổi cách fon người giải quyết bàu toán phức tạo.",
+            6: "Tôi dất thik đocj truyện tranh vào buỏi chiều tối",
+            7: "Thời tiếc miền bắc mùa đông xe lạnh và có mưa fùn nhẹ.",
+            8: "Hôm nay trời rất trong xabh, tôi ngồi đocj sasch tại ghư viện."
         };
 
         function setCleanSample(idx) {

@@ -32,9 +32,16 @@ class VietnameseSpellCorrector:
         self.model_name_or_path = model_name_or_path
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
 
-        # Khởi tạo Tokenizer và Model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
+        # Khởi tạo Tokenizer và Model (ưu tiên nạp từ cache offline)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, local_files_only=True)
+        except Exception:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+
+        try:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path, local_files_only=True)
+        except Exception:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
         self.model.to(self.device)
         self.model.eval()
 
