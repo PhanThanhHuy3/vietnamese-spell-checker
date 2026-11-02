@@ -503,15 +503,32 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <span class="sample-pill" onclick="setCorruptSample(3)">Lỗi phím lân cận & mất dấu</span>
                 </div>
 
+                <div style="background:#0d121f; border:1px solid var(--card-border); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1.25rem;">
+                    <label style="margin-bottom:0.5rem; display:block;">Chọn động cơ sửa lỗi:</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:1.5rem;">
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; color:#a5b4fc; font-weight:600;">
+                            <input type="radio" name="engine_mode" value="rule" checked style="accent-color:var(--primary);">
+                            <span>⚡ Bộ Luật & Ngữ Âm Thông Minh (Khuyên dùng: Siêu tốc 0.01s, Chuẩn xác)</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; color:#cbd5e1;">
+                            <input type="radio" name="engine_mode" value="ai" style="accent-color:var(--primary);">
+                            <span>🧠 Mô hình Deep Learning ViT5 (Cần GPU / Train đủ epochs)</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="action-row">
-                    <button class="btn-primary" onclick="correctSpelling()">
+                    <button id="btn-correct" class="btn-primary" onclick="correctSpelling()">
                         🚀 Kiểm Tra & Sửa Lỗi Ngay
                     </button>
                 </div>
 
                 <!-- Kết quả sửa lỗi -->
                 <div id="correct-result" class="output-box" style="display:none;">
-                    <label>Câu chuẩn sau khi sửa:</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                        <label style="margin:0;">Câu chuẩn sau khi sửa:</label>
+                        <span id="engine-used-badge" class="badge-rule" style="background:rgba(16,185,129,0.2); color:#6ee7b7;"></span>
+                    </div>
                     <div class="output-text" id="corrected-sentence-display"></div>
                     <div id="correct-details"></div>
                 </div>
@@ -636,22 +653,40 @@ HTML_CONTENT = """<!DOCTYPE html>
             const text = document.getElementById('corrupt-text').value.trim();
             if (!text) return;
 
-            const res = await fetch('/api/correct_spelling', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ text })
-            });
+            const btn = document.getElementById('btn-correct');
+            const originalBtnHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang kiểm tra & sửa lỗi...';
 
-            const data = await res.json();
-            displayCorrectResult(data);
+            const selectedMode = document.querySelector('input[name="engine_mode"]:checked').value;
+
+            try {
+                const res = await fetch('/api/correct_spelling', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text, mode: selectedMode })
+                });
+
+                const data = await res.json();
+                displayCorrectResult(data);
+            } catch (err) {
+                alert('Có lỗi xảy ra khi gọi server: ' + err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+            }
         }
 
         function displayCorrectResult(data) {
             const resultBox = document.getElementById('correct-result');
             const displayEl = document.getElementById('corrected-sentence-display');
             const detailsEl = document.getElementById('correct-details');
+            const engineBadge = document.getElementById('engine-used-badge');
 
             resultBox.style.display = 'block';
+            if (engineBadge && data.engine) {
+                engineBadge.innerText = '⚙️ ' + data.engine;
+            }
             displayEl.innerHTML = `<span class="highlight-fixed">${data.corrected_text}</span>`;
 
             if (data.has_error && data.errors_found && data.errors_found.length > 0) {
@@ -761,7 +796,18 @@ class SpellCheckerRequestHandler(http.server.BaseHTTPRequestHandler):
         # 2. API SỬA LỖI (SPELL CHECKER)
         elif parsed.path == "/api/correct_spelling":
             text = req.get("text", "")
-            result = smart_corrector.check_and_correct(text)
+            mode = req.get("mode", "rule")
+            if mode == "rule":
+                try:
+                    import importlib
+                    import src.smart_corrector
+                    importlib.reload(src.smart_corrector)
+                    rule_corrector = src.smart_corrector.SmartVietnameseCorrector()
+                    result = rule_corrector.check_and_correct(text, mode=mode)
+                except Exception:
+                    result = smart_corrector.check_and_correct(text, mode=mode)
+            else:
+                result = smart_corrector.check_and_correct(text, mode=mode)
             self._set_headers(200)
             self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
         else:

@@ -6,6 +6,22 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 
+# Tương thích với các phiên bản transformers mới (sửa lỗi Unigram Sequence/dict trong T5Tokenizer)
+try:
+    from transformers.models.t5 import tokenization_t5
+    _orig_t5_init = tokenization_t5.T5Tokenizer.__init__
+
+    def _patched_t5_init(self, *args, **kwargs):
+        if "vocab" in kwargs and isinstance(kwargs["vocab"], dict):
+            kwargs["vocab"] = [(k, float(v)) for k, v in kwargs["vocab"].items()]
+        elif len(args) > 0 and isinstance(args[0], dict):
+            args = ([(k, float(v)) for k, v in args[0].items()],) + args[1:]
+        return _orig_t5_init(self, *args, **kwargs)
+
+    tokenization_t5.T5Tokenizer.__init__ = _patched_t5_init
+except Exception:
+    pass
+
 from .preprocess import normalize_vietnamese_text
 
 

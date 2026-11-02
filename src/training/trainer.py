@@ -26,30 +26,43 @@ class SpellingTrainer:
         training_cfg = self.config.get("training", {})
         output_dir = training_cfg.get("output_dir", "checkpoints/vit5_spelling_corrector")
 
-        # Cấu hình tham số huấn luyện của HuggingFace
-        self.training_args = Seq2SeqTrainingArguments(
-            output_dir=output_dir,
-            learning_rate=float(training_cfg.get("learning_rate", 5e-5)),
-            weight_decay=float(training_cfg.get("weight_decay", 0.01)),
-            num_train_epochs=int(training_cfg.get("num_train_epochs", 5)),
-            per_device_train_batch_size=int(training_cfg.get("per_device_train_batch_size", 16)),
-            per_device_eval_batch_size=int(training_cfg.get("per_device_eval_batch_size", 16)),
-            gradient_accumulation_steps=int(training_cfg.get("gradient_accumulation_steps", 1)),
-            warmup_ratio=float(training_cfg.get("warmup_ratio", 0.1)),
-            fp16=bool(training_cfg.get("fp16", False)),
-            logging_steps=int(training_cfg.get("logging_steps", 50)),
-            eval_strategy=training_cfg.get("eval_strategy", "steps"),
-            eval_steps=int(training_cfg.get("eval_steps", 500)),
-            save_strategy=training_cfg.get("save_strategy", "steps"),
-            save_steps=int(training_cfg.get("save_steps", 500)),
-            save_total_limit=int(training_cfg.get("save_total_limit", 2)),
-            load_best_model_at_end=bool(training_cfg.get("load_best_model_at_end", True)),
-            metric_for_best_model=training_cfg.get("metric_for_best_model", "exact_match"),
-            greater_is_better=bool(training_cfg.get("greater_is_better", True)),
-            predict_with_generate=True,
-            generation_max_length=self.config.get("model", {}).get("max_target_length", 128),
-            report_to="none",  # Có thể đổi sang 'tensorboard' hoặc 'wandb'
-        )
+        # Cấu hình tham số huấn luyện tương thích cả transformers cũ và mới
+        import inspect
+        sig = inspect.signature(Seq2SeqTrainingArguments.__init__)
+
+        args_dict = {
+            "output_dir": output_dir,
+            "learning_rate": float(training_cfg.get("learning_rate", 5e-5)),
+            "weight_decay": float(training_cfg.get("weight_decay", 0.01)),
+            "num_train_epochs": int(training_cfg.get("num_train_epochs", 5)),
+            "per_device_train_batch_size": int(training_cfg.get("per_device_train_batch_size", 16)),
+            "per_device_eval_batch_size": int(training_cfg.get("per_device_eval_batch_size", 16)),
+            "gradient_accumulation_steps": int(training_cfg.get("gradient_accumulation_steps", 1)),
+            "fp16": bool(training_cfg.get("fp16", False)),
+            "logging_steps": int(training_cfg.get("logging_steps", 10)),
+            "eval_strategy": training_cfg.get("eval_strategy", "epoch"),
+            "save_strategy": training_cfg.get("save_strategy", "epoch"),
+            "save_total_limit": int(training_cfg.get("save_total_limit", 2)),
+            "load_best_model_at_end": bool(training_cfg.get("load_best_model_at_end", True)),
+            "metric_for_best_model": training_cfg.get("metric_for_best_model", "exact_match"),
+            "greater_is_better": bool(training_cfg.get("greater_is_better", True)),
+            "predict_with_generate": True,
+            "generation_max_length": self.config.get("model", {}).get("max_target_length", 128),
+            "report_to": "none",
+        }
+
+        # Nếu dùng steps thay vì epoch
+        if args_dict["eval_strategy"] == "steps":
+            args_dict["eval_steps"] = int(training_cfg.get("eval_steps", 50))
+            args_dict["save_steps"] = int(training_cfg.get("save_steps", 50))
+
+        # Tương thích warmup_ratio vs warmup_steps
+        if "warmup_ratio" in sig.parameters:
+            args_dict["warmup_ratio"] = float(training_cfg.get("warmup_ratio", 0.1))
+        elif "warmup_steps" in sig.parameters:
+            args_dict["warmup_steps"] = int(training_cfg.get("warmup_steps", 10))
+
+        self.training_args = Seq2SeqTrainingArguments(**args_dict)
 
         # Chuẩn bị Collator và Metrics Callback
         self.data_collator = build_data_collator(
