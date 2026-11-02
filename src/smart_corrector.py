@@ -302,6 +302,7 @@ PHRASE_PATTERNS = [
     (r"\bxó\s+(mưa|thể|nhiều|tiền|người|tác\s+dụng|ích|lợi|việc)\b", r"có \1"),
     (r"\bva\b(?!\s+(chạm|quẹt|đập|vào|phải))", "và"),
     (r"\bthời\s+tiếc\b", "thời tiết"),
+    (r"\bmiền\s+bắc\b", "miền Bắc"),
     (r"\bxe\s+lạnh\b", "se lạnh"),
     (r"\bmưa\s+fùn\b", "mưa phùn"),
     (r"\bdất\s+trong\s+xanh\b", "rất trong xanh"),
@@ -582,7 +583,11 @@ class SmartVietnameseCorrector:
             }
 
         if mode == "ai" and self.load_ai_model():
-            corrected = self.ai_model.correct(text)
+            ai_out = self.ai_model.correct(text)
+            if ai_out and len(ai_out.strip()) > 0:
+                corrected = self.correct_rule_based(ai_out)
+            else:
+                corrected = self.correct_rule_based(text)
             engine = "Deep Learning (ViT5 Transformer)"
         else:
             corrected = self.correct_rule_based(text)

@@ -71,6 +71,8 @@ class VietnameseSpellCorrector:
                 **encoded,
                 max_length=max_length,
                 num_beams=num_beams,
+                no_repeat_ngram_size=4,
+                repetition_penalty=1.2,
                 early_stopping=True,
             )
 
