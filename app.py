@@ -23,6 +23,7 @@ from src.smart_corrector import SmartVietnameseCorrector
 
 # Khởi tạo bộ sửa lỗi thông minh và bộ sinh lỗi
 smart_corrector = SmartVietnameseCorrector()
+smart_corrector.load_ai_model()
 noise_gen = VietnameseNoiseGenerator(seed=42)
 AI_MODEL_AVAILABLE = smart_corrector.use_ai
 
@@ -780,8 +781,9 @@ class SpellCheckerRequestHandler(http.server.BaseHTTPRequestHandler):
             self._set_headers(200, "application/json")
             status_data = {
                 "ai_available": smart_corrector.use_ai,
+                "model_name": "ViT5 Transformer",
                 "engine": "ViT5 Deep Learning" if smart_corrector.use_ai else "Smart Vietnamese Rule & Phonetic Engine",
-                "device": "CUDA/CPU" if smart_corrector.use_ai else "N/A",
+                "device": "CUDA" if (smart_corrector.use_ai and smart_corrector.ai_model and smart_corrector.ai_model.device.type == "cuda") else "CPU",
             }
             self.wfile.write(json.dumps(status_data, ensure_ascii=False).encode("utf-8"))
         else:

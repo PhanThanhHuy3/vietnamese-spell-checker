@@ -142,6 +142,8 @@ EXTRA_BIGRAMS = {
     ("sở", "thích"), ("thích", "của"), ("của", "tôi"), ("tôi", "là"), ("là", "học"),
     ("học", "tiếng"), ("tiếng", "anh"), ("của", "bạn"), ("của", "mình"),
     ("của", "chúng"), ("chúng", "tôi"), ("chúng", "ta"), ("của", "anh"), ("của", "em"),
+    ("tôi", "ngồi"), ("ngồi", "đọc"), ("đọc", "sách"), ("cứu", "về"), ("về", "tiếng"),
+    ("tại", "thư"), ("thư", "viện"), ("ngồi", "học"), ("ngồi", "nghiên"),
 }
 COMPOUND_BIGRAMS.update(EXTRA_BIGRAMS)
 
@@ -242,6 +244,7 @@ COMMON_WORD_FIXES = {
     "đọcj": "đọc", "họcj": "học", "sachs": "sách", "nghiengj": "nghiêng",
     "tôu": "tôi", "tou": "tôi", "ngườu": "người", "nguoi": "người",
     "lhẹ": "nhẹ", "fiền": "tiền", "mu7a": "mưa",
+    "ntồi": "ngồi", "fại": "tại",
 }
 
 # Các từ có tần suất xuất hiện cực cao trong tiếng Việt
@@ -251,6 +254,7 @@ HIGH_FREQ_WORDS = {
     "viết", "đọc", "sách", "xem", "cho", "với", "của", "trong", "ngày", "nay",
     "rất", "nhiều", "thời", "gian", "ăn", "uống", "tiền", "thích", "sở", "anh",
     "em", "việt", "nam", "yêu", "biết", "hiểu", "giúp", "đã", "sẽ", "đang",
+    "ngồi", "tại", "thư", "viện",
 }
 
 # Mẫu sửa theo cụm từ ngữ cảnh (Contextual Phrase Patterns)
@@ -259,6 +263,13 @@ PHRASE_PATTERNS = [
     (r"\bthích\s+của\s+(tôu|tou|tâu|tôm)\b", "thích của tôi"),
     (r"\bcủa\s+(tôu|tou|tâu|tôm)\s+là\b", "của tôi là"),
     (r"\bcủa\s+(tôu|tou|tâu)\b", "của tôi"),
+    (r"\b(về|học|nói|viết)\s+tiến\s+(việt|Việt)\b", r"\1 tiếng \2"),
+    (r"\btiến\s+(việt|Việt)\b", r"tiếng \1"),
+    (r"\b(tôi|bạn|người|mình)\s+ntồi\b", r"\1 ngồi"),
+    (r"\bntồi\s+(đọc|học|viết|nghiên|làm)\b", r"ngồi \1"),
+    (r"\bntồi\b", "ngồi"),
+    (r"\bfại\s+(thư\s+viện|nhà|trường|đây|đó)\b", r"tại \1"),
+    (r"\bfại\b(?=\s+(thư|nhà|trường|đây|đó))", "tại"),
     (r"\btiếng\s+anh\b", "tiếng Anh"),
     (r"\btiếng\s+việt\b", "tiếng Việt"),
     (r"\btiếng\s+nhật\b", "tiếng Nhật"),
