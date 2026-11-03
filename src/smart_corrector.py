@@ -146,6 +146,38 @@ EXTRA_BIGRAMS = {
     ("tại", "thư"), ("thư", "viện"), ("ngồi", "học"), ("ngồi", "nghiên"),
     ("tôi", "rất"), ("rất", "thích"), ("thích", "đi"), ("đi", "học"),
     ("hôm", "nay"), ("nay", "tôi"), ("tôi", "bị"), ("bị", "ốm"),
+    # Gia đình & đời sống
+    ("mẹ", "đang"), ("bố", "đang"), ("anh", "ấy"), ("em", "học"),
+    ("con", "mèo"), ("con", "chó"), ("con", "gà"),
+    ("thấy", "mẹ"), ("về", "thấy"), ("học", "về"),
+    ("nấu", "cơm"), ("mẹ", "nấu"), ("bố", "nấu"),
+    ("ngủ", "trên"), ("ngủ", "ở"), ("làm", "việc"),
+    ("ra", "ngoài"), ("không", "ra"), ("ngoài", "được"),
+    ("học", "bài"), ("xong", "chưa"), ("bài", "xong"),
+    ("ăn", "cơm"), ("uống", "nước"), ("muốn", "uống"),
+    # Thời tiết
+    ("trời", "mưa"), ("mưa", "to"), ("to", "quá"), ("quá", "nên"),
+    ("nên", "tôi"), ("bầu", "trời"), ("trời", "trong"), ("trong", "xanh"),
+    # Câu hỏi / hướng
+    ("đi", "đâu"), ("đến", "đâu"), ("ở", "đâu"), ("làm", "gì"),
+    ("vậy", "sao"), ("anh", "đi"), ("chiều", "nay"),
+    # Học thuật
+    ("nghiên", "cứu"), ("sinh", "viên"), ("trường", "đại"), ("đại", "học"),
+    ("bài", "tập"), ("tập", "thể"), ("thể", "dục"),
+    # Thêm các cặp phổ biến
+    ("rất", "mệt"), ("rất", "vui"), ("rất", "buồn"), ("rất", "khỏe"),
+    ("tôi", "muốn"), ("tôi", "cần"), ("tôi", "thấy"),
+    ("đang", "ăn"), ("đang", "ngủ"), ("đang", "học"), ("đang", "làm"),
+    ("vào", "buổi"), ("buổi", "sáng"), ("buổi", "chiều"), ("buổi", "tối"),
+    ("đọc", "sách"), ("xem", "phim"), ("nghe", "nhạc"),
+    ("trên", "ghế"), ("trên", "bàn"),
+    # Con mèo / con chó context
+    ("mèo", "đang"), ("chó", "đang"),
+    # Câu hỏi vậy
+    ("đâu", "vậy"),
+    # Hoàn thành hành động
+    ("xong", "chưa"), ("học", "xong"), ("ăn", "xong"), ("làm", "xong"),
+    ("chưa", "ăn"), ("chưa", "học"), ("chưa", "làm"), ("chưa", "xong"),
 }
 COMPOUND_BIGRAMS.update(EXTRA_BIGRAMS)
 
@@ -247,6 +279,19 @@ COMMON_WORD_FIXES = {
     "tôu": "tôi", "tou": "tôi", "ngườu": "người", "nguoi": "người",
     "lhẹ": "nhẹ", "fiền": "tiền", "mu7a": "mưa",
     "ntồi": "ngồi", "fại": "tại",
+    # Đảo chữ phổ biến
+    "xogn": "xong", "meò": "mèo", "mèop": "mèo", "meop": "mèo",
+    "bàni": "bàn", "sáhc": "sách", "tốii": "tối", "xogn": "xong",
+    "vệcc": "việc", "nưwocs": "nước", "nươc": "nước",
+    # Lỗi gõ thêm ký tự cuối
+    "tốii": "tối", "thíchs": "thích", "thichs": "thích",
+    "sáchh": "sách", "mạngg": "mạng",
+    # Lỗi dấu thường gặp
+    "rát": "rất", "mẹy": "mẹ", "mẹi": "mẹ",
+    # Ký tự thừa ở từ con mèo
+    "mèpo": "mèo", "mepo": "mèo", "mèop": "mèo",
+    # Đảo chữ xogn -> xong (thêm vào đây để ưu tiên)
+    "xogn": "xong",
 }
 
 # Các từ có tần suất xuất hiện cực cao trong tiếng Việt
@@ -353,6 +398,16 @@ PHRASE_PATTERNS = [
     (r"\bphức\s+tạo\b", "phức tạp"),
     (r"\bbài\s+toán\s+phức\s+tạo\b", "bài toán phức tạp"),
     (r"\brất\s+ngong\b", "rất ngon"),
+
+    # Con mèo (đảo chữ / ký tự thừa)
+    (r"\bcon\s+me[oò][a-z]*\b", "con mèo"),
+    (r"\bme[oò]p[o]?\b", "mèo"),
+
+    # Câu hỏi: đi đầu vậy -> đi đâu vậy
+    (r"\b(anh|chị|em|bạn|mình|cậu|bố|mẹ)\s+đi\s+đầu\b", r"\1 đi đâu"),
+    (r"\bđi\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"đi đâu \1"),
+    (r"\bđến\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"đến đâu \1"),
+    (r"\bở\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"ở đâu \1"),
 ]
 
 
@@ -390,6 +445,97 @@ class SmartVietnameseCorrector:
             self.use_ai = False
             return False
 
+    def _normalize_repeated_chars(self, word: str) -> str:
+        """Chuẩn hoá ký tự lặp: trrời -> trời, thichs -> thích, vệcc -> việc.
+        Xử lý phụ âm lặp (trrời), nguyên âm lặp (tốii), và ký tự thừa cuối (thichs, vệcc).
+        """
+        w = word
+        # Bước 1: Rút gọn 3+ ký tự giống nhau liền tiếp về 1 (trrr -> tr -> tr...)
+        # Với phụ âm: trrời -> trời, nhưng không rút 'oo' vì 'oo' là Telex hợp lệ
+        # Chiến lược: thử rút từng ký tự lặp và kiểm tra từ điển
+        # Tìm pattern: cùng ký tự lặp >= 2 lần (phụ âm) hoặc >= 3 lần (nguyên âm/tất cả)
+        import re as _re
+        # 1a. Phụ âm lặp >= 2 (không phải nguyên âm có dấu) -> rút về 1
+        consonant_double = _re.sub(r'([bcdfghjklmnpqrstvwxyz])\1+', r'\1', w)
+        if consonant_double != w and remove_accents(consonant_double) in self.base_to_syllables:
+            w = consonant_double
+        elif consonant_double != w and consonant_double in self.syllables:
+            w = consonant_double
+
+        # 1b. Nguyên âm lặp >= 3 (tốiii -> tối) -> rút về 1
+        vowel_triple = _re.sub(r'([aăâeêioôơuưyáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ])\1{2,}', r'\1', w)
+        if vowel_triple != w and (vowel_triple in self.syllables or remove_accents(vowel_triple) in self.base_to_syllables):
+            w = vowel_triple
+
+        # 1c. Nguyên âm có dấu lặp 2 lần (tốii -> tối, trờii -> trời)
+        # Chỉ rút nếu kết quả tạo ra âm tiết hợp lệ
+        # Pattern: (nguyên âm có dấu) + (nguyên âm ASCII không dấu giống) lặp 1 lần cuối
+        # ví dụ: tốii - ố+i+i: thử bỏ i cuối -> tối ✓
+        if len(w) >= 3 and w[-1] == w[-2]:
+            stripped = w[:-1]
+            if stripped in self.syllables or remove_accents(stripped) in self.base_to_syllables:
+                w = stripped
+
+        return w
+
+    def _generate_transpositions(self, word: str) -> Set[str]:
+        """Sinh các ứng viên từ đảo 2 ký tự liền kề (xogn->xong, meò->mèo).
+        CHỈ áp dụng nếu từ gốc KHÔNG phải âm tiết hợp lệ."""
+        cands: Set[str] = set()
+        w = word.lower()
+        # Không tạo transposition nếu từ gốc đã đúng (tránh chưa->chừa)
+        if w in self.syllables:
+            return cands
+        for i in range(len(w) - 1):
+            transposed = w[:i] + w[i+1] + w[i] + w[i+2:]
+            if transposed in self.syllables:
+                cands.add(transposed)
+            # Thử với base (không dấu) rồi tra lại
+            b = remove_accents(transposed)
+            if b in self.base_to_syllables:
+                for s in self.base_to_syllables[b]:
+                    cands.add(s)
+        return cands
+
+    def _fix_trailing_extra_char(self, word: str) -> Set[str]:
+        """Xử lý ký tự thừa cuối từ: vệcc->việc, sachs->sách, nưwocs->nước.
+        CHỈ cắt nếu từ gốc KHÔNG phải âm tiết hợp lệ."""
+        cands: Set[str] = set()
+        w = word.lower()
+
+        # Không xử lý nếu từ gốc đã là âm tiết hợp lệ (tránh cắt nhầm: chưa -> chư)
+        if w in self.syllables:
+            return cands
+
+        # Thử bỏ 1-2 ký tự cuối rồi kiểm tra từ điển
+        for trim_len in [1, 2]:
+            if len(w) > trim_len + 1:
+                trimmed = w[:-trim_len]
+                if trimmed in self.syllables:
+                    cands.add(trimmed)
+                b = remove_accents(trimmed)
+                if b in self.base_to_syllables:
+                    for s in self.base_to_syllables[b]:
+                        cands.add(s)
+
+        # Xử lý Telex phức tạp: nưwocs -> thử từng cặp replace Telex rồi bỏ ký tự thừa
+        w_telex = w
+        for k, v in sorted(TELEX_REPLACE_MAP.items(), key=lambda x: -len(x[0])):
+            if k in w_telex:
+                w_telex = w_telex.replace(k, v)
+        # Sau khi áp Telex, thử bỏ ký tự thừa cuối
+        for trim_len in [0, 1, 2]:
+            candidate = w_telex[:len(w_telex) - trim_len] if trim_len > 0 else w_telex
+            if len(candidate) >= 2:
+                if candidate in self.syllables:
+                    cands.add(candidate)
+                b = remove_accents(candidate)
+                if b in self.base_to_syllables:
+                    for s in self.base_to_syllables[b]:
+                        cands.add(s)
+
+        return cands
+
     def generate_candidates(self, word: str) -> Set[str]:
         """Tạo danh sách ứng viên từ sửa lỗi chuẩn tiếng Việt."""
         w = word.lower()
@@ -401,10 +547,24 @@ class SmartVietnameseCorrector:
         if w in TEENCODE_MAP:
             cands.add(TEENCODE_MAP[w])
 
+        # 1.5. Chuẩn hoá ký tự lặp trước khi tìm ứng viên (trrời->trời, tốii->tối)
+        normalized = self._normalize_repeated_chars(w)
+        if normalized != w:
+            if normalized in self.syllables:
+                cands.add(normalized)
+            b_norm = remove_accents(normalized)
+            if b_norm in self.base_to_syllables:
+                for s in self.base_to_syllables[b_norm]:
+                    cands.add(s)
+            # Tiếp tục xử lý normalized thay vì w gốc
+            w_proc = normalized
+        else:
+            w_proc = w
+
         # 2. Xử lý VNI số trong từ (ví dụ: ma5ng -> mạng, sa1ch -> sách, nay6 -> nay)
-        if any(c.isdigit() for c in w):
+        if any(c.isdigit() for c in w_proc):
             # VNI thay thế chuỗi ký tự + số
-            w_vni = w
+            w_vni = w_proc
             for k, v in VNI_REPLACE_MAP.items():
                 if k in w_vni:
                     w_vni = w_vni.replace(k, v)
@@ -412,7 +572,7 @@ class SmartVietnameseCorrector:
                 cands.add(w_vni)
 
             # Thử bỏ số đính kèm cuối từ
-            no_digits = "".join(c for c in w if not c.isdigit())
+            no_digits = "".join(c for c in w_proc if not c.isdigit())
             if no_digits in self.syllables:
                 cands.add(no_digits)
             b_no_dig = remove_accents(no_digits)
@@ -421,15 +581,15 @@ class SmartVietnameseCorrector:
                     cands.add(s)
 
         # 3. Tra cứu từ dạng không dấu (ví dụ: tiet -> tiết, tiệt)
-        base = remove_accents(w)
+        base = remove_accents(w_proc)
         if base in self.base_to_syllables:
             for s in self.base_to_syllables[base]:
                 cands.add(s)
 
         # 4. Ký tự ngoại lai f, j, w, z
-        if "f" in w:
+        if "f" in w_proc:
             for rep in ["ph", "t", "c", "d", "v"]:
-                w_rep = w.replace("f", rep)
+                w_rep = w_proc.replace("f", rep)
                 if w_rep in self.syllables:
                     cands.add(w_rep)
                 b_rep = remove_accents(w_rep)
@@ -437,9 +597,9 @@ class SmartVietnameseCorrector:
                     for s in self.base_to_syllables[b_rep]:
                         cands.add(s)
 
-        if "j" in w:
+        if "j" in w_proc:
             for rep in ["gi", "d", "m"]:
-                w_rep = w.replace("j", rep)
+                w_rep = w_proc.replace("j", rep)
                 if w_rep in self.syllables:
                     cands.add(w_rep)
                 b_rep = remove_accents(w_rep)
@@ -448,16 +608,20 @@ class SmartVietnameseCorrector:
                         cands.add(s)
 
         # 5. Xử lý lỗi Telex dính phím (sasch -> sách, hoafng -> hoàng)
-        w_telex = w
-        for k, v in TELEX_REPLACE_MAP.items():
+        w_telex = w_proc
+        for k, v in sorted(TELEX_REPLACE_MAP.items(), key=lambda x: -len(x[0])):
             if k in w_telex:
                 w_telex = w_telex.replace(k, v)
         if w_telex in self.syllables:
             cands.add(w_telex)
+        b_telex = remove_accents(w_telex)
+        if b_telex in self.base_to_syllables:
+            for s in self.base_to_syllables[b_telex]:
+                cands.add(s)
 
         # 6. Xử lý dính phím telex đuôi (sáchs -> sách, nayw -> nay, thongw -> thông)
-        if len(w) > 2 and w[-1] in ["s", "f", "r", "x", "j", "w"]:
-            w_strip = w[:-1]
+        if len(w_proc) > 2 and w_proc[-1] in ["s", "f", "r", "x", "j", "w"]:
+            w_strip = w_proc[:-1]
             if w_strip in self.syllables:
                 cands.add(w_strip)
             b_strip = remove_accents(w_strip)
@@ -465,39 +629,50 @@ class SmartVietnameseCorrector:
                 for s in self.base_to_syllables[b_strip]:
                     cands.add(s)
 
+        # 6.5. Đảo 2 ký tự liền kề (transposition): xogn->xong, meò->mèo
+        cands.update(self._generate_transpositions(w_proc))
+
+        # 6.6. Ký tự thừa cuối từ (vệcc->việc, nưwocs->nước)
+        cands.update(self._fix_trailing_extra_char(w_proc))
+
         # 7. Phương ngữ ch <-> tr, s <-> x, d <-> r
-        if w.startswith("ch") and ("tr" + w[2:]) in self.syllables:
-            cands.add("tr" + w[2:])
-        elif w.startswith("tr") and ("ch" + w[2:]) in self.syllables:
-            cands.add("ch" + w[2:])
-        elif w.startswith("x") and ("s" + w[1:]) in self.syllables:
-            cands.add("s" + w[1:])
-        elif w.startswith("s") and ("x" + w[1:]) in self.syllables:
-            cands.add("x" + w[1:])
-        elif w.startswith("d") and ("r" + w[1:]) in self.syllables:
-            cands.add("r" + w[1:])
-        elif w.startswith("r") and ("d" + w[1:]) in self.syllables:
-            cands.add("d" + w[1:])
+        if w_proc.startswith("ch") and ("tr" + w_proc[2:]) in self.syllables:
+            cands.add("tr" + w_proc[2:])
+        elif w_proc.startswith("tr") and ("ch" + w_proc[2:]) in self.syllables:
+            cands.add("ch" + w_proc[2:])
+        elif w_proc.startswith("x") and ("s" + w_proc[1:]) in self.syllables:
+            cands.add("s" + w_proc[1:])
+        elif w_proc.startswith("s") and ("x" + w_proc[1:]) in self.syllables:
+            cands.add("x" + w_proc[1:])
+        elif w_proc.startswith("d") and ("r" + w_proc[1:]) in self.syllables:
+            cands.add("r" + w_proc[1:])
+        elif w_proc.startswith("r") and ("d" + w_proc[1:]) in self.syllables:
+            cands.add("d" + w_proc[1:])
 
         # 7.2 Phím lân cận nguyên âm (đặc biệt u <-> i trên phím QWERTY: tôu -> tôi, ngườu -> người)
-        if w.endswith("u") and len(w) >= 3:
-            w_i = w[:-1] + "i"
+        if w_proc.endswith("u") and len(w_proc) >= 3:
+            w_i = w_proc[:-1] + "i"
             if w_i in self.syllables:
                 cands.add(w_i)
             b_i = remove_accents(w_i)
             if b_i in self.base_to_syllables:
                 for s in self.base_to_syllables[b_i]:
                     cands.add(s)
-        if w.endswith("ou") or w.endswith("ôu"):
-            w_oi = w[:-2] + "ôi"
+        if w_proc.endswith("ou") or w_proc.endswith("ôu"):
+            w_oi = w_proc[:-2] + "ôi"
             if w_oi in self.syllables:
                 cands.add(w_oi)
 
         # 8. Nếu vẫn chưa có ứng viên, tìm theo khoảng cách Levenshtein <= 1 trong từ điển
         if not cands:
             for syl in self.syllables:
-                if abs(len(syl) - len(w)) <= 1 and get_levenshtein_dist(w, syl) <= 1:
+                if abs(len(syl) - len(w_proc)) <= 1 and get_levenshtein_dist(w_proc, syl) <= 1:
                     cands.add(syl)
+            # Cũng thử với từ gốc w nếu w != w_proc
+            if not cands and w != w_proc:
+                for syl in self.syllables:
+                    if abs(len(syl) - len(w)) <= 1 and get_levenshtein_dist(w, syl) <= 1:
+                        cands.add(syl)
 
         return cands
 
@@ -529,13 +704,31 @@ class SmartVietnameseCorrector:
             next_w = clean_tokens[i + 1] if i < len(clean_tokens) - 1 else ""
             next2_w = clean_tokens[i + 2] if i < len(clean_tokens) - 2 else ""
 
+            # Dùng từ đã được sửa ở vị trí trước (thay vì token gốc) để tra bigram chính xác hơn
+            if i > 0 and corrected_words:
+                prev_corrected = corrected_words[-1].lower().strip(".,;:?!\"'()[]-–")
+                if prev_corrected:
+                    prev_w = prev_corrected
+            if i > 1 and len(corrected_words) >= 2:
+                prev2_corrected = corrected_words[-2].lower().strip(".,;:?!\"'()[]-–")
+                if prev2_corrected:
+                    prev2_w = prev2_corrected
+
             # Kiểm tra xem từ hiện tại có ngữ cảnh Bigram bảo vệ không
             has_context = (prev_w and (prev_w, cw) in self.bigrams) or (next_w and (cw, next_w) in self.bigrams)
 
+            # Kiểm tra từ có vẻ "ổn" không (không dính số, không có ký tự lặp bất thường)
+            # Ký tự lặp: trrời, đanng, tốii -> cần sửa ngay cả khi has_context
+            has_repeated_consonant = bool(re.search(r'([bcdfghjklmnpqrstvwxyz])\1', cw))
+            # Nguyên âm lặp cuối (ii, uu, aa...) KHÔNG phải do Telex (aa=â, ee=ê, oo=ô, uw=ư)
+            has_trailing_double_vowel = bool(re.search(r'[aăâeêioôơuưy]{2,}$', cw)) and not any(
+                cw.endswith(t) for t in ['aa', 'ee', 'oo', 'uw', 'aw', 'ow']
+            )
+            needs_fix = has_repeated_consonant or has_trailing_double_vowel or cw in COMMON_WORD_FIXES
+
             # NGUYÊN TẮC CỐT LÕI: Nếu từ ĐÃ là một âm tiết tiếng Việt chuẩn xác trong từ điển 74K
-            # VÀ có ngữ cảnh Bigram bảo vệ VÀ không dính số, không nằm trong danh sách sửa lỗi cưỡng bức -> GIỮ NGUYÊN!
-            # Điều này đảm bảo từ đúng trong câu không bao giờ bị đổi sai.
-            if cw in self.syllables and has_context and cw not in COMMON_WORD_FIXES and not any(c.isdigit() for c in cw):
+            # VÀ có ngữ cảnh Bigram bảo vệ VÀ không cần sửa -> GIỮ NGUYÊN!
+            if cw in self.syllables and has_context and not needs_fix and not any(c.isdigit() for c in cw):
                 corrected_words.append(tok)
                 continue
 
@@ -569,19 +762,26 @@ class SmartVietnameseCorrector:
             best_score = float("inf")
 
             for cand in cands:
-                # Điểm cơ sở
+                # Điểm cơ sở: từ khác với từ gốc thì tính khoảng cách
                 if cand == cw:
                     score = 0.0 if has_context else 1.0
                     if cw in self.syllables:
                         score -= 1.0
                     if cw in HIGH_FREQ_WORDS:
                         score -= 2.5
+                    # Phạt nếu cw có vẻ là lỗi (ký tự lặp, ký tự thừa)
+                    if needs_fix:
+                        score += 5.0
                 else:
-                    score = get_levenshtein_dist(cw, cand) * 1.5
+                    dist = get_levenshtein_dist(cw, cand)
+                    score = dist * 1.5
                     if cand in HIGH_FREQ_WORDS:
                         score -= 1.5
                     if cw in HIGH_FREQ_WORDS:
                         score += 3.0
+                    # Thưởng thêm nếu cand là kết quả normalize (ít ký tự hơn = bỏ ký tự thừa)
+                    if len(cand) < len(cw) and cand in self.syllables:
+                        score -= 0.5
 
                 # Điểm thưởng Bigram với từ đứng trước
                 if prev_w and (prev_w, cand) in self.bigrams:
