@@ -241,6 +241,7 @@ COMMON_WORD_FIXES = {
     "chời": "trời", "chong": "trong", "đocj": "đọc", "hocj": "học",
     "đọcj": "đọc", "họcj": "học", "sachs": "sách", "nghiengj": "nghiêng",
     "tôu": "tôi", "tou": "tôi", "ngườu": "người", "nguoi": "người",
+    "lhẹ": "nhẹ", "fiền": "tiền", "mu7a": "mưa",
 }
 
 # Các từ có tần suất xuất hiện cực cao trong tiếng Việt
@@ -298,6 +299,10 @@ PHRASE_PATTERNS = [
     # Thời tiết & Đời sống
     (r"\b(và|va)\s+xó\b", "và có"),
     (r"\bva\s+có\b", "và có"),
+    (r"\b(mưa|mu7a)\s+(phùn|fùn)\s+(lhẹ|lẹ)\b", "mưa phùn nhẹ"),
+    (r"\b(phùn|fùn)\s+(lhẹ|lẹ)\b", "phùn nhẹ"),
+    (r"\blhẹ\b", "nhẹ"),
+    (r"\bmu7a\b", "mưa"),
     (r"\bse\s+lạnn\b", "se lạnh"),
     (r"\bxó\s+(mưa|thể|nhiều|tiền|người|tác\s+dụng|ích|lợi|việc)\b", r"có \1"),
     (r"\bva\b(?!\s+(chạm|quẹt|đập|vào|phải))", "và"),
@@ -552,6 +557,50 @@ class SmartVietnameseCorrector:
             res = res[0].upper() + res[1:]
         return res
 
+    def align_and_preserve(self, original_text: str, ai_candidate: str) -> str:
+        """
+        MÀNG LỌC BẢO TOÀN CẤU TRÚC CÂU TUYỆT ĐỐI (Strict Sentence & Identity Preservation):
+        - Đảm bảo hệ thống CHỈ SỬA LỖI CHÍNH TẢ, tuyệt đối KHÔNG ĐỔI NỘI DUNG CÂU.
+        - Nếu AI bị ảo giác (hallucination) tự ý biến thành câu khác hoặc thêm/bớt từ tùy tiện,
+          màng lọc sẽ bác bỏ hoàn toàn sự bịa đặt của AI và giữ nguyên từng chữ của câu gốc.
+        """
+        if not ai_candidate or not ai_candidate.strip():
+            return self.correct_rule_based(original_text)
+
+        # 1. Đo độ tương đồng ký tự và cấu trúc từ giữa câu gốc và câu do AI sinh ra
+        matcher = difflib.SequenceMatcher(None, original_text.lower(), ai_candidate.lower())
+        sim_ratio = matcher.ratio()
+
+        orig_words = original_text.split()
+        ai_words = ai_candidate.split()
+
+        # Nếu độ tương đồng < 0.65 hoặc chênh lệch số lượng từ quá 2 từ:
+        # Khẳng định 100% AI đang sinh ảo giác (bịa sang câu khác) -> BÁC BỎ CÂU AI!
+        if sim_ratio < 0.65 or abs(len(orig_words) - len(ai_words)) > 2:
+            return self.correct_rule_based(original_text)
+
+        # 2. Nếu AI sửa đúng cấu trúc câu: Căn chỉnh từng từ (Word-level alignment)
+        # Nguyên tắc: Từ nào của người dùng vốn đã viết đúng tiếng Việt -> CẤM ĐƯỢC ĐỔI!
+        rule_fixed_words = self.correct_rule_based(original_text).split()
+        if len(orig_words) == len(ai_words) == len(rule_fixed_words):
+            final_words = []
+            for orig_w, ai_w, rule_w in zip(orig_words, ai_words, rule_fixed_words):
+                clean_orig = orig_w.lower().strip(".,;:?!\"'()[]-–")
+                # Nếu từ gốc đã là từ chuẩn tiếng Việt và không nằm trong danh sách lỗi thường gặp
+                if clean_orig in self.syllables and clean_orig not in COMMON_WORD_FIXES:
+                    final_words.append(orig_w)
+                else:
+                    # Nếu từ gốc bị lỗi: Kiểm tra xem AI sửa có hợp lý không
+                    clean_ai = ai_w.lower().strip(".,;:?!\"'()[]-–")
+                    if clean_ai in self.syllables:
+                        final_words.append(ai_w)
+                    else:
+                        final_words.append(rule_w)
+            return " ".join(final_words)
+
+        # Mặc định an toàn: Dùng kết quả bảo toàn từng từ đã qua tinh chỉnh
+        return self.correct_rule_based(original_text)
+
     def find_differences(self, original: str, corrected: str) -> List[Dict[str, Any]]:
         """So khớp từng từ để chỉ ra vị trí và thay đổi giữa câu gốc và câu sửa."""
         orig_words = original.split()
@@ -583,12 +632,15 @@ class SmartVietnameseCorrector:
             }
 
         if mode == "ai" and self.load_ai_model():
-            ai_out = self.ai_model.correct(text)
-            if ai_out and len(ai_out.strip()) > 0:
-                corrected = self.correct_rule_based(ai_out)
-            else:
-                corrected = self.correct_rule_based(text)
-            engine = "Deep Learning (ViT5 Transformer)"
+            try:
+                ai_out = self.ai_model.correct(text, prefix="sửa lỗi: ")
+            except Exception:
+                try:
+                    ai_out = self.ai_model.correct(text)
+                except Exception:
+                    ai_out = ""
+            corrected = self.align_and_preserve(text, ai_out)
+            engine = "Deep Learning (ViT5 Transformer) + Guard"
         else:
             corrected = self.correct_rule_based(text)
             engine = "Smart Rule & Phonetics Engine"
