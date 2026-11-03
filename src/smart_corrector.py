@@ -178,6 +178,48 @@ EXTRA_BIGRAMS = {
     # Hoàn thành hành động
     ("xong", "chưa"), ("học", "xong"), ("ăn", "xong"), ("làm", "xong"),
     ("chưa", "ăn"), ("chưa", "học"), ("chưa", "làm"), ("chưa", "xong"),
+    # Học thuật & môn học
+    ("môn", "học"), ("học", "môn"), ("môn", "toán"), ("môn", "lý"), ("môn", "hóa"),
+    ("học", "phần"), ("phần", "học"), ("bài", "giảng"), ("giảng", "viên"),
+    # Thực phẩm & nấu ăn
+    ("ăn", "cơm"), ("ăn", "phở"), ("ăn", "sáng"), ("ăn", "trưa"), ("ăn", "tối"),
+    ("thịt", "gà"), ("thịt", "bò"), ("thịt", "heo"), ("thịt", "lợn"),
+    ("với", "thịt"), ("cơm", "với"),
+    ("mua", "rau"), ("mua", "thịt"), ("mua", "hàng"), ("mua", "đồ"),
+    ("đi", "chợ"), ("chợ", "mua"),
+    ("món", "ăn"), ("rất", "thích"), ("thích", "món"),
+    # Đại từ / liên kết
+    ("ăn", "này"), ("món", "này"), ("cái", "này"), ("bài", "này"), ("cuốn", "này"),
+    ("ngày", "này"), ("lúc", "này"), ("giờ", "này"), ("người", "này"),
+    ("ấy", "đang"), ("ấy", "rất"), ("ấy", "là"),
+    # Trạng từ / tính từ
+    ("rất", "ngon"), ("rất", "đẹp"), ("rất", "tốt"), ("rất", "giỏi"),
+    ("rất", "nhiều"), ("rất", "ít"), ("rất", "xa"), ("rất", "gần"),
+    ("quá", "trời"), ("quá", "đẹp"), ("quá", "ngon"),
+    # Hành động phổ biến
+    ("đang", "đi"), ("đang", "chạy"), ("đang", "chơi"), ("đang", "viết"),
+    ("đang", "nấu"), ("đang", "xem"), ("đang", "nghe"), ("đang", "đọc"),
+    ("muốn", "ăn"), ("muốn", "đi"), ("muốn", "mua"), ("muốn", "học"),
+    ("được", "không"), ("không", "được"), ("có", "thể"),
+    ("thể", "giúp"), ("giúp", "tôi"),
+    # Thời gian
+    ("hôm", "qua"), ("qua", "tôi"), ("ngày", "mai"), ("mai", "tôi"),
+    ("tối", "nay"), ("nay", "anh"), ("nay", "em"), ("nay", "bạn"),
+    ("sẽ", "đi"), ("sẽ", "về"), ("sẽ", "làm"), ("sẽ", "học"),
+    # Tiếng Việt / ngôn ngữ
+    ("tiếng", "anh"), ("tiếng", "việt"), ("tiếng", "nhật"),
+    ("tiếng", "hàn"), ("tiếng", "trung"), ("tiếng", "pháp"),
+    ("học", "tiếng"), ("nói", "tiếng"), ("viết", "tiếng"),
+    # Cấu trúc câu
+    ("tôi", "đi"), ("tôi", "ăn"), ("tôi", "làm"), ("tôi", "học"),
+    ("tôi", "về"), ("tôi", "đang"), ("tôi", "sẽ"), ("tôi", "đã"),
+    ("tôi", "không"), ("tôi", "có"),
+    ("em", "đi"), ("em", "ăn"), ("em", "muốn"), ("em", "cần"),
+    ("anh", "đang"), ("anh", "muốn"), ("anh", "cần"), ("anh", "sẽ"),
+    ("bạn", "có"), ("bạn", "muốn"), ("bạn", "đang"), ("bạn", "sẽ"),
+    # Mua sắm & đi chợ
+    ("chợ", "mua"), ("mua", "rau"), ("mua", "cá"), ("mua", "thịt"),
+    ("mua", "gạo"), ("mua", "quà"), ("mua", "sắm"),
 }
 COMPOUND_BIGRAMS.update(EXTRA_BIGRAMS)
 
@@ -292,6 +334,11 @@ COMMON_WORD_FIXES = {
     "mèpo": "mèo", "mepo": "mèo", "mèop": "mèo",
     # Đảo chữ xogn -> xong (thêm vào đây để ưu tiên)
     "xogn": "xong",
+    # QWERTY neighbor j→n
+    "môj": "môn", "ăj": "ăn", "họt": "học",
+    "tiếg": "tiếng",
+    # Ký tự thừa cuối
+    "thịtt": "thịt", "gàa": "gà",
 }
 
 # Các từ có tần suất xuất hiện cực cao trong tiếng Việt
@@ -408,6 +455,14 @@ PHRASE_PATTERNS = [
     (r"\bđi\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"đi đâu \1"),
     (r"\bđến\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"đến đâu \1"),
     (r"\bở\s+đầu\s+(vậy|thế|hả|nhỉ|không)\b", r"ở đâu \1"),
+
+    # Học thuật: môn học, tiếng
+    (r"\bhocj?\s+môj\s+họt\s+sâu\b", "học môn học sâu"),
+    (r"\bhoc\s+môj\s+họt\s+sâu\b", "học môn học sâu"),
+    (r"\bmôj\s+họt\b", "môn học"),
+    (r"\bmôj\s+học\b", "môn học"),
+    (r"\bhọt\s+sâu\b", "học sâu"),
+    (r"\btiếg\s+(anh|việt|nhật|hàn|trung|pháp)\b", r"tiếng \1"),
 ]
 
 
@@ -479,13 +534,9 @@ class SmartVietnameseCorrector:
         return w
 
     def _generate_transpositions(self, word: str) -> Set[str]:
-        """Sinh các ứng viên từ đảo 2 ký tự liền kề (xogn->xong, meò->mèo).
-        CHỈ áp dụng nếu từ gốc KHÔNG phải âm tiết hợp lệ."""
+        """Sinh các ứng viên từ đảo 2 ký tự liền kề (xogn->xong, meò->mèo, mau->mua)."""
         cands: Set[str] = set()
         w = word.lower()
-        # Không tạo transposition nếu từ gốc đã đúng (tránh chưa->chừa)
-        if w in self.syllables:
-            return cands
         for i in range(len(w) - 1):
             transposed = w[:i] + w[i+1] + w[i] + w[i+2:]
             if transposed in self.syllables:
@@ -598,7 +649,7 @@ class SmartVietnameseCorrector:
                         cands.add(s)
 
         if "j" in w_proc:
-            for rep in ["gi", "d", "m"]:
+            for rep in ["gi", "d", "m", "n"]:
                 w_rep = w_proc.replace("j", rep)
                 if w_rep in self.syllables:
                     cands.add(w_rep)
@@ -766,7 +817,8 @@ class SmartVietnameseCorrector:
                 if cand == cw:
                     score = 0.0 if has_context else 1.0
                     if cw in self.syllables:
-                        score -= 1.0
+                        # BẢO VỆ MẠNH: Từ gốc đã đúng chính tả → cần bigram rất mạnh mới đổi
+                        score -= 3.0
                     if cw in HIGH_FREQ_WORDS:
                         score -= 2.5
                     # Phạt nếu cw có vẻ là lỗi (ký tự lặp, ký tự thừa)
@@ -775,6 +827,9 @@ class SmartVietnameseCorrector:
                 else:
                     dist = get_levenshtein_dist(cw, cand)
                     score = dist * 1.5
+                    # Phạt thêm nếu cw đã là từ hợp lệ → ứng viên khác cần điểm rất cao mới thắng
+                    if cw in self.syllables and not needs_fix:
+                        score += 3.0
                     if cand in HIGH_FREQ_WORDS:
                         score -= 1.5
                     if cw in HIGH_FREQ_WORDS:
