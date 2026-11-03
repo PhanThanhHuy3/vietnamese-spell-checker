@@ -387,6 +387,9 @@ PHRASE_PATTERNS = [
     (r"\b(về|học|nói|viết)\s+tiến\s+(việt|Việt)\b", r"\1 tiếng \2"),
     (r"\btiến\s+(việt|Việt)\b", r"tiếng \1"),
     (r"\b(tiến|tiếng)\s+(diệt|Diệt)\b", "tiếng Việt"),
+    (r"\b(sở|yêu|rất)\s+thít\b", r"\1 thích"),
+    (r"\bthít\s+(của|học|ăn|đọc|xem|chơi|đi|làm)\b", r"thích \1"),
+    (r"\bnhâng\s+tạo\b", "nhân tạo"),
     (r"\b(về|vew)\s+tiếng\s+Việt\b", "về tiếng Việt"),
     (r"\b(về|vew)\s+tiến\s+(diệt|Diệt|việt|Việt)\b", "về tiếng Việt"),
     (r"\bvew\b", "về"),
@@ -783,6 +786,32 @@ class SmartVietnameseCorrector:
             b_c = remove_accents(w_c)
             if b_c in self.base_to_syllables:
                 for s in self.base_to_syllables[b_c]:
+                    cands.add(s)
+
+        # 7.7 Phương ngữ phụ âm cuối t <-> ch, c <-> ch (thít <-> thích, ít <-> ích, đít <-> đích)
+        if w_proc.endswith("t") and len(w_proc) >= 2:
+            w_ch = w_proc[:-1] + "ch"
+            if w_ch in self.syllables:
+                cands.add(w_ch)
+            b_ch = remove_accents(w_ch)
+            if b_ch in self.base_to_syllables:
+                for s in self.base_to_syllables[b_ch]:
+                    cands.add(s)
+        elif w_proc.endswith("ch") and len(w_proc) >= 3:
+            w_t = w_proc[:-2] + "t"
+            if w_t in self.syllables:
+                cands.add(w_t)
+            b_t = remove_accents(w_t)
+            if b_t in self.base_to_syllables:
+                for s in self.base_to_syllables[b_t]:
+                    cands.add(s)
+        if w_proc.endswith("c") and len(w_proc) >= 2:
+            w_ch = w_proc[:-1] + "ch"
+            if w_ch in self.syllables:
+                cands.add(w_ch)
+            b_ch = remove_accents(w_ch)
+            if b_ch in self.base_to_syllables:
+                for s in self.base_to_syllables[b_ch]:
                     cands.add(s)
 
         # 7.6 Phương ngữ phụ âm đầu d <-> v (diệt <-> việt, dề <-> về, dô <-> vô, dàng <-> vàng)
