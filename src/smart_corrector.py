@@ -144,6 +144,8 @@ EXTRA_BIGRAMS = {
     ("của", "chúng"), ("chúng", "tôi"), ("chúng", "ta"), ("của", "anh"), ("của", "em"),
     ("tôi", "ngồi"), ("ngồi", "đọc"), ("đọc", "sách"), ("cứu", "về"), ("về", "tiếng"),
     ("tại", "thư"), ("thư", "viện"), ("ngồi", "học"), ("ngồi", "nghiên"),
+    ("tôi", "rất"), ("rất", "thích"), ("thích", "đi"), ("đi", "học"),
+    ("hôm", "nay"), ("nay", "tôi"), ("tôi", "bị"), ("bị", "ốm"),
 }
 COMPOUND_BIGRAMS.update(EXTRA_BIGRAMS)
 
@@ -259,6 +261,21 @@ HIGH_FREQ_WORDS = {
 
 # Mẫu sửa theo cụm từ ngữ cảnh (Contextual Phrase Patterns)
 PHRASE_PATTERNS = [
+    # Phím lân cận & Cụm từ thực tế (QWERTY neighbor & Contextual typos)
+    (r"\b(tất|tât)\s+thích\b", "rất thích"),
+    (r"\b(tôi|em|anh|chị|bạn|nó)\s+(tất|tât)\b", r"\1 rất"),
+    (r"\b(thích|muốn|phải|không)\s+đu\s+(học|ho5c|chơi|làm|về)\b", r"\1 đi \2"),
+    (r"\bđu\s+(học|ho5c)\b", r"đi \1"),
+    (r"\b(yôm|yom)\s+(nays|nay)\b", "hôm nay"),
+    (r"\b(yôm|yom)\b(?=\s+nay)", "hôm"),
+    (r"\b(yôm|yom)\b", "hôm"),
+    (r"\bnays\b", "nay"),
+    (r"\b(tôi|bạn|anh|chị|em|nó|họ)\s+nị\s+(ổn|ổm|ốm|đau|bệnh|sốt)\b", r"\1 bị ốm"),
+    (r"\b(tôi|bạn|anh|chị|em|nó|họ)\s+nị\b", r"\1 bị"),
+    (r"\bnị\s+(ổn|ổm|ốm)\b", "bị ốm"),
+    (r"\b(bị|nị)\s+ổn\b", "bị ốm"),
+    (r"\bnị\b(?=\s+(đau|bệnh|sốt|thương|phạt|lừa))", "bị"),
+
     # Sở thích & Ngôn ngữ & Đại từ
     (r"\bthích\s+của\s+(tôu|tou|tâu|tôm)\b", "thích của tôi"),
     (r"\bcủa\s+(tôu|tou|tâu|tôm)\s+là\b", "của tôi là"),
