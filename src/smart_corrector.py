@@ -359,6 +359,7 @@ PHRASE_PATTERNS = [
     (r"\b(thích|muốn|phải|không)\s+đu\s+(học|ho5c|chơi|làm|về)\b", r"\1 đi \2"),
     (r"\bđu\s+(học|ho5c)\b", r"đi \1"),
     (r"\b(yôm|yom)\s+(nays|nay)\b", "hôm nay"),
+    (r"\b(hôm|yôm|hom)\s+(nai|nays|nayw|nay6)\b", "hôm nay"),
     (r"\b(yôm|yom)\b(?=\s+nay)", "hôm"),
     (r"\b(yôm|yom)\b", "hôm"),
     (r"\bnays\b", "nay"),
@@ -374,6 +375,11 @@ PHRASE_PATTERNS = [
     (r"\bcủa\s+(tôu|tou|tâu)\b", "của tôi"),
     (r"\b(về|học|nói|viết)\s+tiến\s+(việt|Việt)\b", r"\1 tiếng \2"),
     (r"\btiến\s+(việt|Việt)\b", r"tiếng \1"),
+    (r"\b(tiến|tiếng)\s+(diệt|Diệt)\b", "tiếng Việt"),
+    (r"\b(về|vew)\s+tiếng\s+Việt\b", "về tiếng Việt"),
+    (r"\b(về|vew)\s+tiến\s+(diệt|Diệt|việt|Việt)\b", "về tiếng Việt"),
+    (r"\bvew\b", "về"),
+    (r"\b(rồi|tồi)\s+ngồi\s+(đọc|học|viết|nghiên|làm)\b", r"tôi ngồi \2"),
     (r"\b(tôi|bạn|người|mình)\s+ntồi\b", r"\1 ngồi"),
     (r"\bntồi\s+(đọc|học|viết|nghiên|làm)\b", r"ngồi \1"),
     (r"\bntồi\b", "ngồi"),
@@ -714,6 +720,78 @@ class SmartVietnameseCorrector:
             if w_oi in self.syllables:
                 cands.add(w_oi)
 
+        # 7.3 Hoán đổi nguyên âm i <-> y (nai <-> nay, tai <-> tay, mai <-> may, sai <-> say)
+        if w_proc.endswith("i") and len(w_proc) >= 2:
+            w_y = w_proc[:-1] + "y"
+            if w_y in self.syllables:
+                cands.add(w_y)
+            b_y = remove_accents(w_y)
+            if b_y in self.base_to_syllables:
+                for s in self.base_to_syllables[b_y]:
+                    cands.add(s)
+        elif w_proc.endswith("y") and len(w_proc) >= 2:
+            w_i = w_proc[:-1] + "i"
+            if w_i in self.syllables:
+                cands.add(w_i)
+            b_i = remove_accents(w_i)
+            if b_i in self.base_to_syllables:
+                for s in self.base_to_syllables[b_i]:
+                    cands.add(s)
+
+        # 7.4 Phương ngữ phụ âm cuối n <-> ng (tiến <-> tiếng, buồn <-> buồng, bàn <-> bàng)
+        if w_proc.endswith("ng") and len(w_proc) >= 3:
+            w_n = w_proc[:-2] + "n"
+            if w_n in self.syllables:
+                cands.add(w_n)
+            b_n = remove_accents(w_n)
+            if b_n in self.base_to_syllables:
+                for s in self.base_to_syllables[b_n]:
+                    cands.add(s)
+        elif w_proc.endswith("n") and len(w_proc) >= 2:
+            w_ng = w_proc[:-1] + "ng"
+            if w_ng in self.syllables:
+                cands.add(w_ng)
+            b_ng = remove_accents(w_ng)
+            if b_ng in self.base_to_syllables:
+                for s in self.base_to_syllables[b_ng]:
+                    cands.add(s)
+
+        # 7.5 Phương ngữ phụ âm cuối c <-> t (bắc <-> bắt, các <-> cát, được <-> đượt)
+        if w_proc.endswith("c") and len(w_proc) >= 2:
+            w_t = w_proc[:-1] + "t"
+            if w_t in self.syllables:
+                cands.add(w_t)
+            b_t = remove_accents(w_t)
+            if b_t in self.base_to_syllables:
+                for s in self.base_to_syllables[b_t]:
+                    cands.add(s)
+        elif w_proc.endswith("t") and len(w_proc) >= 2:
+            w_c = w_proc[:-1] + "c"
+            if w_c in self.syllables:
+                cands.add(w_c)
+            b_c = remove_accents(w_c)
+            if b_c in self.base_to_syllables:
+                for s in self.base_to_syllables[b_c]:
+                    cands.add(s)
+
+        # 7.6 Phương ngữ phụ âm đầu d <-> v (diệt <-> việt, dề <-> về, dô <-> vô, dàng <-> vàng)
+        if w_proc.startswith("d") and len(w_proc) >= 2:
+            w_v = "v" + w_proc[1:]
+            if w_v in self.syllables:
+                cands.add(w_v)
+            b_v = remove_accents(w_v)
+            if b_v in self.base_to_syllables:
+                for s in self.base_to_syllables[b_v]:
+                    cands.add(s)
+        elif w_proc.startswith("v") and len(w_proc) >= 2:
+            w_d = "d" + w_proc[1:]
+            if w_d in self.syllables:
+                cands.add(w_d)
+            b_d = remove_accents(w_d)
+            if b_d in self.base_to_syllables:
+                for s in self.base_to_syllables[b_d]:
+                    cands.add(s)
+
         # 8. Nếu vẫn chưa có ứng viên, tìm theo khoảng cách Levenshtein <= 1 trong từ điển
         if not cands:
             for syl in self.syllables:
@@ -794,6 +872,10 @@ class SmartVietnameseCorrector:
                         alt = cw[:idx] + nb + cw[idx + 1 :]
                         if alt in self.syllables:
                             cands.add(alt)
+                        b_alt = remove_accents(alt)
+                        if b_alt in self.base_to_syllables:
+                            for s in self.base_to_syllables[b_alt]:
+                                cands.add(s)
 
             # Thêm biến thể dấu từ base_to_syllables
             b_syl = remove_accents(cw)
@@ -896,22 +978,25 @@ class SmartVietnameseCorrector:
             return self.correct_rule_based(original_text)
 
         # 2. Nếu AI sửa đúng cấu trúc câu: Căn chỉnh từng từ (Word-level alignment)
-        # Nguyên tắc: Từ nào của người dùng vốn đã viết đúng tiếng Việt -> CẤM ĐƯỢC ĐỔI!
         rule_fixed_words = self.correct_rule_based(original_text).split()
         if len(orig_words) == len(ai_words) == len(rule_fixed_words):
             final_words = []
             for orig_w, ai_w, rule_w in zip(orig_words, ai_words, rule_fixed_words):
                 clean_orig = orig_w.lower().strip(".,;:?!\"'()[]-–")
-                # Nếu từ gốc đã là từ chuẩn tiếng Việt và không nằm trong danh sách lỗi thường gặp
-                if clean_orig in self.syllables and clean_orig not in COMMON_WORD_FIXES:
+                clean_ai = ai_w.lower().strip(".,;:?!\"'()[]-–")
+                clean_rule = rule_w.lower().strip(".,;:?!\"'()[]-–")
+
+                # Ưu tiên 1: Cả Rule và AI cùng giữ nguyên -> Từ gốc đúng
+                if rule_w == orig_w and ai_w == orig_w:
                     final_words.append(orig_w)
+                # Ưu tiên 2: Rule-based đã sửa được chuẩn xác (đã qua N-gram và đối soát từ điển)
+                elif rule_w != orig_w and clean_rule in self.syllables:
+                    final_words.append(rule_w)
+                # Ưu tiên 3: AI sửa hợp lý (từ sinh ra là âm tiết chuẩn và gần từ gốc)
+                elif ai_w != orig_w and clean_ai in self.syllables and get_levenshtein_dist(clean_orig, clean_ai) <= 2:
+                    final_words.append(ai_w)
                 else:
-                    # Nếu từ gốc bị lỗi: Kiểm tra xem AI sửa có hợp lý không
-                    clean_ai = ai_w.lower().strip(".,;:?!\"'()[]-–")
-                    if clean_ai in self.syllables:
-                        final_words.append(ai_w)
-                    else:
-                        final_words.append(rule_w)
+                    final_words.append(orig_w)
             return " ".join(final_words)
 
         # Mặc định an toàn: Dùng kết quả bảo toàn từng từ đã qua tinh chỉnh
