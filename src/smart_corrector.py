@@ -327,8 +327,11 @@ PHRASE_PATTERNS = [
     # Thời tiết & Đời sống
     (r"\b(và|va)\s+xó\b", "và có"),
     (r"\bva\s+có\b", "và có"),
-    (r"\b(mưa|mu7a)\s+(phùn|fùn)\s+(lhẹ|lẹ)\b", "mưa phùn nhẹ"),
-    (r"\b(phùn|fùn)\s+(lhẹ|lẹ)\b", "phùn nhẹ"),
+    (r"\b(mưa|mu7a)\s+(phùn|fùn)\s+(nbẹ|lhẹ|lẹ|nẹ)\b", r"\1 phùn nhẹ"),
+    (r"\b(phùn|fùn)\s+(nbẹ|lhẹ|lẹ|nẹ)\b", "phùn nhẹ"),
+    (r"\bnbẹ\b", "nhẹ"),
+    (r"\b(và|va)\s+co\s+mưa\b", "và có mưa"),
+    (r"\bmiền\s+hắc\b", "miền Bắc"),
     (r"\blhẹ\b", "nhẹ"),
     (r"\bmu7a\b", "mưa"),
     (r"\bse\s+lạnn\b", "se lạnh"),
@@ -521,53 +524,83 @@ class SmartVietnameseCorrector:
                 corrected_words.append(tok)
                 continue
 
-            # NGUYÊN TẮC CỐT LÕI: Nếu từ ĐÃ là một âm tiết tiếng Việt chuẩn xác trong từ điển 74K
-            # VÀ không dính số, không nằm trong danh sách sửa lỗi cưỡng bức -> GIỮ NGUYÊN!
-            # Điều này ngăn chặn việc từ đúng bị đổi thành từ sai (như 'nấu ăn ở nhà để' bị đổi)
-            if cw in self.syllables and cw not in COMMON_WORD_FIXES and not any(c.isdigit() for c in cw):
-                corrected_words.append(tok)
-                continue
-
-            # Bước 2: Sinh danh sách ứng viên
-            cands = self.generate_candidates(cw)
-            if not cands:
-                corrected_words.append(tok)
-                continue
-
-            # Bước 3: Đánh giá ngữ cảnh N-gram lân cận để chọn ứng viên xuất sắc nhất
             prev_w = clean_tokens[i - 1] if i > 0 else ""
             prev2_w = clean_tokens[i - 2] if i > 1 else ""
             next_w = clean_tokens[i + 1] if i < len(clean_tokens) - 1 else ""
             next2_w = clean_tokens[i + 2] if i < len(clean_tokens) - 2 else ""
 
+            # Kiểm tra xem từ hiện tại có ngữ cảnh Bigram bảo vệ không
+            has_context = (prev_w and (prev_w, cw) in self.bigrams) or (next_w and (cw, next_w) in self.bigrams)
+
+            # NGUYÊN TẮC CỐT LÕI: Nếu từ ĐÃ là một âm tiết tiếng Việt chuẩn xác trong từ điển 74K
+            # VÀ có ngữ cảnh Bigram bảo vệ VÀ không dính số, không nằm trong danh sách sửa lỗi cưỡng bức -> GIỮ NGUYÊN!
+            # Điều này đảm bảo từ đúng trong câu không bao giờ bị đổi sai.
+            if cw in self.syllables and has_context and cw not in COMMON_WORD_FIXES and not any(c.isdigit() for c in cw):
+                corrected_words.append(tok)
+                continue
+
+            # Bước 2: Sinh danh sách ứng viên (bao gồm cả lỗi phím QWERTY lân cận và đổi dấu)
+            cands = self.generate_candidates(cw)
+            # Thêm các phím lân cận trên QWERTY
+            from .noise_generator import QWERTY_NEIGHBORS
+            for idx, char in enumerate(cw):
+                lower_c = char.lower()
+                if lower_c in QWERTY_NEIGHBORS:
+                    for nb in QWERTY_NEIGHBORS[lower_c]:
+                        alt = cw[:idx] + nb + cw[idx + 1 :]
+                        if alt in self.syllables:
+                            cands.add(alt)
+
+            # Thêm biến thể dấu từ base_to_syllables
+            b_syl = remove_accents(cw)
+            if b_syl in self.base_to_syllables:
+                for syl in self.base_to_syllables[b_syl]:
+                    cands.add(syl)
+
+            if cw in self.syllables:
+                cands.add(cw)
+
+            if not cands:
+                corrected_words.append(tok)
+                continue
+
+            # Bước 3: Đánh giá ngữ cảnh N-gram lân cận để chọn ứng viên xuất sắc nhất
             best_cand = cw
             best_score = float("inf")
 
             for cand in cands:
-                score = get_levenshtein_dist(cw, cand) * 1.5
+                # Điểm cơ sở
+                if cand == cw:
+                    score = 0.0 if has_context else 1.0
+                    if cw in self.syllables:
+                        score -= 1.0
+                    if cw in HIGH_FREQ_WORDS:
+                        score -= 2.5
+                else:
+                    score = get_levenshtein_dist(cw, cand) * 1.5
+                    if cand in HIGH_FREQ_WORDS:
+                        score -= 1.5
+                    if cw in HIGH_FREQ_WORDS:
+                        score += 3.0
 
                 # Điểm thưởng Bigram với từ đứng trước
                 if prev_w and (prev_w, cand) in self.bigrams:
-                    score -= 3.0
+                    score -= 4.0
                 # Điểm thưởng Bigram với từ đứng sau
                 if next_w and (cand, next_w) in self.bigrams:
-                    score -= 3.0
+                    score -= 4.0
 
                 # Điểm thưởng Trigram (ngữ cảnh 3 từ)
                 if prev2_w and prev_w and (prev2_w, prev_w, cand) in self.trigrams:
-                    score -= 4.5
+                    score -= 5.0
                 if prev_w and next_w and (prev_w, cand, next_w) in self.trigrams:
-                    score -= 4.5
+                    score -= 5.0
                 if next_w and next2_w and (cand, next_w, next2_w) in self.trigrams:
-                    score -= 4.5
+                    score -= 5.0
 
                 # Ưu tiên ứng viên có trong từ điển sửa từ
                 if cand in COMMON_WORD_FIXES.values() or cand in TEENCODE_MAP.values():
                     score -= 1.0
-
-                # Ưu tiên các từ có tần suất xuất hiện cao trong tiếng Việt
-                if cand in HIGH_FREQ_WORDS:
-                    score -= 2.0
 
                 if score < best_score:
                     best_score = score
