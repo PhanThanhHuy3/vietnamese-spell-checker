@@ -220,10 +220,18 @@ EXTRA_BIGRAMS = {
     # Mua sắm & đi chợ
     ("chợ", "mua"), ("mua", "rau"), ("mua", "cá"), ("mua", "thịt"),
     ("mua", "gạo"), ("mua", "quà"), ("mua", "sắm"),
+    # Tự hành động / Đại từ + tự
+    ("tôi", "tự"), ("em", "tự"), ("anh", "tự"), ("chị", "tự"),
+    ("bạn", "tự"), ("mình", "tự"), ("nó", "tự"), ("họ", "tự"),
+    ("tự", "nấu"), ("tự", "làm"), ("tự", "học"), ("tự", "ăn"),
+    ("tự", "đi"), ("tự", "mua"), ("tự", "tay"), ("tự", "mình"),
+    ("tự", "chăm"), ("tự", "sửa"), ("tự", "nhiên"), ("tự", "do"),
 }
 COMPOUND_BIGRAMS.update(EXTRA_BIGRAMS)
 
 EXTRA_TRIGRAMS = {
+    ("tôi", "tự", "nấu"),
+    ("tự", "nấu", "ăn"),
     ("sở", "thích", "của"),
     ("thích", "của", "tôi"),
     ("của", "tôi", "là"),
@@ -359,6 +367,9 @@ PHRASE_PATTERNS = [
     (r"\b(thích|muốn|phải|không)\s+đu\s+(học|ho5c|chơi|làm|về)\b", r"\1 đi \2"),
     (r"\bđu\s+(học|ho5c)\b", r"đi \1"),
     (r"\b(yôm|yom)\s+(nays|nay)\b", "hôm nay"),
+    (r"\b(tôi|em|anh|chị|bạn|nó|họ|mình)\s+tu\s+(nấu|học|làm|ăn|đi|uống|mua|chăm|sửa)\b", r"\1 tự \2"),
+    (r"\btu\s+(nấu|học|làm|ăn|đi)\s+(ăn|cơm|bài|việc)\b", r"tự \1 \2"),
+    (r"\btu\s+nấu\b", "tự nấu"),
     (r"\b(hôm|yôm|hom)\s+(nai|nays|nayw|nay6)\b", "hôm nay"),
     (r"\b(yôm|yom)\b(?=\s+nay)", "hôm"),
     (r"\b(yôm|yom)\b", "hôm"),
