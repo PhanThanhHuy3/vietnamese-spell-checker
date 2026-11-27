@@ -35,7 +35,7 @@ class SpellInferencePipeline:
                 })
         return diffs
 
-    def predict(self, text: str, max_length: int = 128, num_beams: int = 4) -> Dict[str, Any]:
+    def predict(self, text: str, max_length: int = 96, num_beams: int = 4) -> Dict[str, Any]:
         """Sửa lỗi một câu và trả về chi tiết các vị trí lỗi."""
         corrected = self.corrector.correct(text, max_length=max_length, num_beams=num_beams)
         diffs = self.find_differences(text, corrected)
@@ -47,7 +47,7 @@ class SpellInferencePipeline:
             "errors_found": diffs,
         }
 
-    def predict_batch(self, texts: List[str], max_length: int = 128, num_beams: int = 4) -> List[Dict[str, Any]]:
+    def predict_batch(self, texts: List[str], max_length: int = 96, num_beams: int = 4) -> List[Dict[str, Any]]:
         """Sửa lỗi cho một danh sách câu."""
         corrected_list = self.corrector.correct(texts, max_length=max_length, num_beams=num_beams)
         results = []

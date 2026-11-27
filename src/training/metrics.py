@@ -42,14 +42,37 @@ def compute_cer(predictions: List[str], references: List[str]) -> float:
     return total_dist / max(total_chars, 1)
 
 
+def compute_token_edit_distance(tokens_a: List[str], tokens_b: List[str]) -> int:
+    """Tính khoảng cách Levenshtein ở cấp độ token (từ/âm tiết).
+
+    Khác với ``compute_levenshtein`` (cấp ký tự), hàm này so khớp từng token.
+    Đây là phép tính đúng để suy ra WER.
+    """
+    previous_row = list(range(len(tokens_b) + 1))
+    for i, token_a in enumerate(tokens_a, start=1):
+        current_row = [i]
+        for j, token_b in enumerate(tokens_b, start=1):
+            insertions = previous_row[j] + 1
+            deletions = current_row[j - 1] + 1
+            substitutions = previous_row[j - 1] + (token_a != token_b)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    return previous_row[-1]
+
+
 def compute_wer(predictions: List[str], references: List[str]) -> float:
-    """Tính Word Error Rate (WER) ở cấp độ từ."""
+    """Tính Word Error Rate (WER) ở cấp độ từ/âm tiết.
+
+    WER = (S + D + I) / N, trong đó S/D/I là số thay thế, xóa, chèn token
+    và N là tổng số token của câu tham chiếu. Khoảng cách Levenshtein phải
+    được tính trên chuỗi token, không phải trên chuỗi ký tự đã nối.
+    """
     total_dist = 0
     total_words = 0
     for p, r in zip(predictions, references):
         words_p = p.strip().split()
         words_r = r.strip().split()
-        total_dist += compute_levenshtein(" ".join(words_p), " ".join(words_r))
+        total_dist += compute_token_edit_distance(words_p, words_r)
         total_words += max(len(words_r), 1)
     return total_dist / max(total_words, 1)
 

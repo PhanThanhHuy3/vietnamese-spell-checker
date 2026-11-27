@@ -66,20 +66,28 @@ def _update_markdown(all_results: dict) -> None:
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
 
+    def _pct(value, default=0.0):
+        """Chuẩn hóa cả giá trị dạng 0..1 (bản ghi cũ) và 0..100 (bản ghi mới)."""
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = default
+        return value * 100 if value <= 1.0 else value
+
     for run_name, run_data in all_results.get("runs", {}).items():
         m = run_data.get("metrics", {})
         det = m.get("detection", {})
         lines.append(
             f"| {run_name} "
             f"| {m.get('num_samples', '—')} "
-            f"| {m.get('exact_match', 0) * 100:.2f} "
+            f"| {_pct(m.get('exact_match', 0)):.2f} "
             f"| {m.get('bleu', 0):.2f} "
-            f"| {m.get('token_accuracy', 0) * 100:.2f} "
-            f"| {m.get('cer', 0) * 100:.2f} "
-            f"| {m.get('wer', 0) * 100:.2f} "
-            f"| {det.get('precision', 0):.2f} "
-            f"| {det.get('recall', 0):.2f} "
-            f"| {det.get('f1', 0):.2f} |"
+            f"| {_pct(m.get('token_accuracy', m.get('syllable_accuracy', 0))):.2f} "
+            f"| {_pct(m.get('cer', 0)):.2f} "
+            f"| {_pct(m.get('wer', 0)):.2f} "
+            f"| {_pct(det.get('precision', 0)):.2f} "
+            f"| {_pct(det.get('recall', 0)):.2f} "
+            f"| {_pct(det.get('f1', 0)):.2f} |"
         )
 
     lines.append("")

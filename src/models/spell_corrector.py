@@ -48,7 +48,7 @@ class VietnameseSpellCorrector:
     def correct(
         self,
         texts: Union[str, List[str]],
-        max_length: int = 128,
+        max_length: int = 96,
         num_beams: int = 4,
         prefix: str = "spelling: ",
     ) -> Union[str, List[str]]:

@@ -1074,7 +1074,7 @@ class SmartVietnameseCorrector:
 
         if mode == "ai" and self.load_ai_model():
             try:
-                ai_out = self.ai_model.correct(text, prefix="sửa lỗi: ")
+                ai_out = self.ai_model.correct(text, prefix="spelling: ")
             except Exception:
                 try:
                     ai_out = self.ai_model.correct(text)

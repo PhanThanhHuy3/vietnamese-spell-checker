@@ -45,9 +45,10 @@ def normalize_vietnamese_text(text: str) -> str:
         return ""
 
     text = normalize_unicode(text)
-    # Chuẩn hoá các loại dấu ngoặc kép
-    text = re.sub(r"[\"\"«»„“]", '"', text)
-    text = re.sub(r"[\'\'`ʼ]", "'", text)
+    # Chuẩn hoá các loại dấu ngoặc kép (cả mở “ và đóng ”)
+    text = re.sub(r"[\"«»„“”]", '"', text)
+    # Chuẩn hoá các loại dấu ngoặc đơn (cả mở ‘ và đóng ’)
+    text = re.sub(r"['‘’`ʼ]", "'", text)
     # Loại bỏ khoảng trắng thừa
     text = clean_whitespaces(text)
     return text

@@ -1,0 +1,20 @@
+{
+  "model_name": "VietAI/vit5-base",
+  "prefix": "spelling: ",
+  "max_source_length": 96,
+  "max_target_length": 96,
+  "trained_at": "2026-11-10T00:07:37.658831",
+  "test_metrics": {
+    "exact_match": 67.22466960352423,
+    "token_accuracy": 94.56394099957038,
+    "bleu": 96.90639973081691,
+    "cer": 0.9713629695771414,
+    "wer": 4.428891056164305,
+    "precision": 53.299091268273415,
+    "recall": 71.4134462678666,
+    "f1": 61.04072398190045,
+    "tp": 1349,
+    "fp": 1182,
+    "fn": 540
+  }
+}

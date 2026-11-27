@@ -1,10 +1,8 @@
 import argparse
-import os
 from pathlib import Path
 
-# Ưu tiên sử dụng cache local để không bị nghẽn mạng
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# Không ép chế độ offline: trên máy mới/Colab cần tải VietAI/vit5-base từ Hugging Face.
+# Nếu muốn dùng cache local, đặt biến môi trường HF_HUB_OFFLINE=1 bên ngoài tiến trình.
 
 from src.data.dataset import SpellingDataset
 from src.models.spell_corrector import VietnameseSpellCorrector

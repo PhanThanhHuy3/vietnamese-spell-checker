@@ -18,10 +18,13 @@ Input câu lỗi → [Encoder ViT5] → [Decoder ViT5] → Output câu đã sử
                    tokenization)
 ```
 
-- **Kiến trúc**: T5 Encoder-Decoder (Transformer), ~250M parameters
+- **Kiến trúc**: T5 Encoder-Decoder (Transformer), ~226M parameters
 - **Pretrained backbone**: `VietAI/vit5-base` (pretrained trên 100GB văn bản tiếng Việt)
 - **Finetuning**: Cross-Entropy Loss, AdamW optimizer, Warmup Scheduler
 - **Decoding**: Beam Search (`num_beams=4`, `no_repeat_ngram_size=4`, `repetition_penalty=1.2`)
+- **Checkpoint hiện tại**: 1 epoch, 283 global step, batch 16 × gradient accumulation 2,
+  learning rate 2e-4, max length 96 token. Huấn luyện trên CPU ~99 phút; train loss cuối 0.0666,
+  eval loss cuối 0.0456.
 
 ### Mô hình Bổ Sung: Smart Corrector (N-gram + Levenshtein)
 
@@ -78,7 +81,7 @@ vietnamese-spell-checker/
 ├── train.py                          # Huấn luyện / finetuning ViT5
 ├── evaluate.py                       # Đánh giá toàn diện (8 chỉ số định lượng)
 ├── predict.py                        # Dự đoán CLI tương tác
-├── app.py                            # Gradio Web UI (port 7860)
+├── app.py                            # HTTP server + HTML/CSS/JS UI (port 7860, 4 tab)
 └── requirements.txt
 ```
 
@@ -114,12 +117,22 @@ Script sinh 6 loại nhiễu: Telex, phương ngữ, dấu hỏi/ngã, rụng d�
 ### 4. Huấn luyện mô hình ViT5 (Training / Finetuning)
 
 ```bash
-python train.py --epochs 5 --batch_size 16 --lr 5e-5
+# Cấu hình mặc định trong configs/config.yaml khớp với checkpoint hiện tại
+python train.py
+
+# Hoặc ghi đè tham số khi cần
+python train.py --epochs 1 --batch_size 16 --lr 2e-4
 ```
 
 Checkpoint tốt nhất được lưu tại: `checkpoints/vit5_spelling_corrector/best_model/`
 
-Trên Google Colab (T4 GPU): mở `notebooks/train_colab.ipynb`
+Trên Google Colab (T4 GPU): mở `notebooks/train_colab.ipynb`.
+
+> ⚠️ **Lưu ý về split của notebook**: notebook trộn 2.000 câu sạch với 7.472 câu VSEC
+> *trước khi* chia train/val/test, nên 743/935 câu test trùng id với tập train. Khi báo cáo
+> kết quả, chỉ dùng 192 câu test "unseen" làm con số công bằng. Script `generate_noise_data.py`
+> đã được sửa để chia câu sạch trước khi sinh nhiễu và mặc định ghi vào `data/synthetic`,
+> không ghi đè `data/processed`.
 
 ### 5. Đánh giá mô hình (Evaluation — 8 chỉ số định lượng)
 
@@ -147,15 +160,17 @@ python evaluate.py \
 | **Recall** | Detection | Tỷ lệ phát hiện đúng / tổng lỗi thực |
 | **F1-score** | Detection | Trung bình điều hòa Precision & Recall |
 
-### 6. Giao diện Web (Gradio UI)
+### 6. Giao diện Web (HTTP server + HTML/CSS/JS)
 
 ```bash
 python app.py
 # Mở trình duyệt tại http://localhost:7860
 ```
 
-- **Tab 1**: Bộ Sinh Nhiễu — tô màu từng loại lỗi được tạo
-- **Tab 2**: AI Corrector — hiển thị Diff so sánh input vs output
+- **Tab 1**: Trình sửa lỗi AI — nhập câu, chạy ViT5, xem diff và chọn từng gợi ý sửa.
+- **Tab 2**: Đối sánh ViT5 vs Rule Engine trên cùng một câu.
+- **Tab 3**: Bộ sinh lỗi nhân tạo (Telex, phương ngữ, dấu hỏi/ngã, QWERTY…).
+- **Tab 4**: Báo cáo thực nghiệm — metrics 192 câu unseen, đồ thị train loss và cấu hình huấn luyện.
 
 ### 7. Dự đoán qua dòng lệnh
 
@@ -171,14 +186,31 @@ python predict.py
 
 ## 📊 Kết Quả Thực Nghiệm
 
-Xem bảng so sánh đầy đủ tại [`logs/EVALUATION.md`](logs/EVALUATION.md).
+Xem bảng so sánh đầy đủ tại [`logs/EVALUATION.md`](logs/EVALUATION.md) và số liệu gốc tại
+[`logs/eval_results.json`](logs/eval_results.json).
+
+### Kết quả chính — 192 câu test "unseen" (không nằm trong tập huấn luyện)
 
 | Model | #Câu | EM (%) | BLEU | Token Acc (%) | CER (%) | WER (%) | Det-P (%) | Det-R (%) | F1 (%) |
 |---|---|---|---|---|---|---|---|---|---|
-| Smart Corrector (rule) | 200 | 36.50 | 92.24 | — | 1.05 | 3.59 | 59.42 | 71.00 | 64.69 |
-| ViT5 Finetuned | 935 | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
+| **ViT5 Finetuned** | 192 | **58.33** | **96.02** | **95.05** | **1.53** | **2.43** | **55.50** | **78.83** | **65.14** |
+| Rule Baseline (N-gram + Levenshtein) | 192 | 6.77 | 85.72 | 92.27 | 1.97 | 6.47 | 28.40 | 23.78 | 25.89 |
 
-> Chạy `python evaluate.py` để cập nhật kết quả ViT5.
+### Kết quả tham chiếu — toàn bộ 935 câu test
+
+> ⚠️ 743/935 câu trùng id với tập train của notebook (rò rỉ dữ liệu). Chỉ dùng để tham chiếu,
+> **không** trích dẫn như kết quả sạch.
+
+| Model | #Câu | EM (%) | BLEU | Token Acc (%) | CER (%) | WER (%) | Det-P (%) | Det-R (%) | F1 (%) |
+|---|---|---|---|---|---|---|---|---|---|
+| ViT5 Finetuned | 935 | 73.48 | 97.21 | 95.59 | 1.25 | 1.79 | 62.20 | 89.26 | 73.31 |
+| Rule Baseline | 935 | 6.84 | 85.83 | 91.42 | 2.03 | 6.49 | 28.92 | 20.65 | 24.10 |
+
+**Phân tích lỗi trên 192 câu unseen (ViT5):** 80/192 câu còn sai (41.67%); 109 thay thế,
+29 xóa, 3 chèn token; 14 câu bị đổi độ dài; 194 vị trí bị sửa quá tay (over-correction).
+
+> Chạy `python evaluate.py` để đánh giá lại và cập nhật `logs/`. WER đã được sửa để tính
+> đúng ở cấp token (trước đây tính nhầm trên chuỗi ký tự đã nối).
 
 ---
 
@@ -187,11 +219,14 @@ Xem bảng so sánh đầy đủ tại [`logs/EVALUATION.md`](logs/EVALUATION.md
 | Tham số | Giá trị | Mô tả |
 |---|---|---|
 | `model.name_or_path` | `VietAI/vit5-base` | Pretrained backbone |
-| `model.max_source_length` | 64 | Độ dài tối đa input |
+| `model.max_source_length` | 96 | Độ dài tối đa input (khớp checkpoint) |
+| `model.max_target_length` | 96 | Độ dài tối đa output (khớp checkpoint) |
 | `training.learning_rate` | 2e-4 | AdamW learning rate |
-| `training.num_train_epochs` | 2 | Số epoch huấn luyện |
-| `training.per_device_train_batch_size` | 12 | Batch size |
+| `training.num_train_epochs` | 1 | Số epoch huấn luyện |
+| `training.per_device_train_batch_size` | 16 | Batch size |
+| `training.gradient_accumulation_steps` | 2 | Batch hiệu dụng = 32 |
 | `training.warmup_ratio` | 0.1 | Warmup ratio |
+| `training.metric_for_best_model` | `loss` | Chọn checkpoint theo eval loss |
 | `training.fp16` | false | Mixed precision (true khi có GPU) |
 | `generation.num_beams` | 4 | Beam Search width |
 

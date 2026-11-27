@@ -1,137 +1,161 @@
-"""Script tải và tiền xử lý bộ dữ liệu chuẩn VSEC Corpus (Vietnamese Spelling Error Correction).
-Nguồn: https://github.com/VSEC2021/VSEC
-Bộ dữ liệu gồm 9.341 câu và 11.202 lỗi chính tả thực tế được gán nhãn thủ công.
-"""
-
+"""Chuẩn bị các tập VSEC cố định trước khi tăng cường dữ liệu."""
+import argparse
+from collections import Counter, defaultdict
+from hashlib import sha256
 import json
-import os
-import random
-import sys
-import urllib.request
 from pathlib import Path
+import random
+from urllib.request import urlretrieve
+
+from src.data.preprocess import normalize_vietnamese_text as normalize
+
+ROOT = Path(__file__).resolve().parents[2]
+RAW = ROOT / "data/raw/VSEC.jsonl"
+PROCESSED = ROOT / "data/processed"
+MANIFEST = ROOT / "data/splits/split_manifest.json"
+SPLITS = ("train", "val", "test")
+URL = "https://raw.githubusercontent.com/VSEC2021/VSEC/main/Dataset/VSEC.jsonl"
 
 
-VSEC_RAW_URL = "https://raw.githubusercontent.com/VSEC2021/VSEC/main/Dataset/VSEC.jsonl"
-RAW_FILE = Path("data/raw/VSEC.jsonl")
-PROCESSED_DIR = Path("data/processed")
+def write_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(text, encoding="utf-8", newline="\n")
+    temporary.replace(path)
 
 
-def download_vsec():
-    """Tải file VSEC.jsonl từ kho chính thức."""
-    RAW_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if RAW_FILE.exists() and RAW_FILE.stat().st_size > 20_000_000:
-        print(f"[*] File {RAW_FILE} đã tồn tại ({RAW_FILE.stat().st_size / (1024*1024):.2f} MB). Bỏ qua tải.")
-        return
-
-    print(f"[*] Đang tải VSEC Corpus từ {VSEC_RAW_URL}...")
-    req = urllib.request.Request(VSEC_RAW_URL, headers={"User-Agent": "Mozilla/5.0"})
-    
-    with urllib.request.urlopen(req) as resp, open(RAW_FILE, "wb") as f:
-        total_size = int(resp.headers.get("content-length", 0))
-        downloaded = 0
-        chunk_size = 1024 * 1024  # 1MB
-        
-        while True:
-            chunk = resp.read(chunk_size)
-            if not chunk:
-                break
-            f.write(chunk)
-            downloaded += len(chunk)
-            if total_size > 0:
-                percent = downloaded * 100 / total_size
-                print(f"    -> Đã tải {downloaded / (1024*1024):.1f}/{total_size / (1024*1024):.1f} MB ({percent:.1f}%)", end="\r")
-            else:
-                print(f"    -> Đã tải {downloaded / (1024*1024):.1f} MB", end="\r")
-    print(f"\n[*] Tải thành công VSEC Corpus: {RAW_FILE}")
+def write_json(path, data):
+    write_text(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
-def process_vsec():
-    """Chuyển đổi VSEC sang format train/val/test jsonl chuẩn."""
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    
-    records = []
-    clean_sentences = []
-    
-    print("[*] Đang đọc và chuyển đổi VSEC.jsonl...")
-    with open(RAW_FILE, "r", encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
+def write_rows(path, rows):
+    write_text(path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows))
+
+
+def read_rows(path):
+    with Path(path).open(encoding="utf-8-sig") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
+def file_hash(path):
+    return sha256(Path(path).read_bytes()).hexdigest()
+
+
+def text_key(text):
+    text = normalize(text).casefold()
+    return " ".join("".join(c if c.isalnum() else " " for c in text).split()) or text
+
+
+def content_keys(row):
+    return {text_key(row[field]) for field in ("input_text", "target_text", "source_text")}
+
+
+def parse_record(row, position):
+    source = normalize(row["text"])
+    annotations = sorted(row["annotations"], key=lambda item: item["id"])
+    if not source or not annotations or len({a["id"] for a in annotations}) != len(annotations):
+        raise ValueError("Thiếu văn bản hoặc annotation hợp lệ")
+    inputs, targets = [], []
+    for ann in annotations:
+        current = normalize(ann["current_syllable"])
+        target = current if ann["is_correct"] else normalize(ann["alternative_syllables"][0])
+        if not current or not target or not isinstance(ann["is_correct"], bool):
+            raise ValueError("Annotation không hợp lệ")
+        inputs.append(current)
+        targets.append(target)
+    return dict(id=f"vsec_{position:05d}", source_text=source,
+                input_text=" ".join(inputs), target_text=" ".join(targets),
+                error_count=sum(a != b for a, b in zip(inputs, targets)))
+
+
+def group_rows(rows):
+    parent = list(range(len(rows)))
+    owner = {}
+
+    def root(index):
+        while index != parent[index]:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for index, row in enumerate(rows):
+        for key in sorted(content_keys(row)):
+            parent[root(index)] = root(owner.setdefault(key, index))
+    groups = defaultdict(list)
+    for index, row in enumerate(rows):
+        groups[root(index)].append(row)
+    return list(groups.values())
+
+
+def prepare(raw=RAW, output=PROCESSED, manifest_path=MANIFEST, seed=42):
+    rows, rejected, seen = [], [], set()
+    duplicates = 0
+    with raw.open(encoding="utf-8-sig") as handle:
+        for position, line in enumerate(handle, 1):
             try:
-                item = json.loads(line)
-            except Exception:
+                row = parse_record(json.loads(line), position)
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+                rejected.append(position)
                 continue
-            
-            ann = item.get("annotations", [])
-            if not ann:
+            rows.append(row)
+    # Group before deduplication so even a duplicate with another raw source links its group.
+    groups = []
+    for group in group_rows(rows):
+        unique = []
+        for row in group:
+            key = (row["input_text"], row["target_text"])
+            if key in seen:
+                duplicates += 1
                 continue
-            
-            # Khôi phục input và target theo từng âm tiết
-            input_tokens = []
-            target_tokens = []
-            error_count = 0
-            
-            for a in ann:
-                curr = a.get("current_syllable", "")
-                alt = a.get("alternative_syllables", [])
-                is_correct = a.get("is_correct", True)
-                
-                input_tokens.append(curr)
-                if not is_correct and alt:
-                    target_tokens.append(alt[0])
-                    error_count += 1
-                else:
-                    target_tokens.append(curr)
-            
-            input_text = " ".join(input_tokens).strip()
-            target_text = " ".join(target_tokens).strip()
-            
-            if not input_text or not target_text:
-                continue
-            
-            records.append({
-                "id": f"vsec_{idx+1:05d}",
-                "input_text": input_text,
-                "target_text": target_text,
-                "error_count": error_count,
-            })
-            clean_sentences.append(target_text)
+            seen.add(key)
+            unique.append(row)
+        groups.append(unique)
+    if len(groups) < 3:
+        raise ValueError("Cần ít nhất ba nhóm VSEC độc lập")
+    random.Random(seed).shuffle(groups)
+    count = len(seen)
+    train, val = int(count * .8), int(count * .1)
+    goals = dict(zip(SPLITS, (train, val, count - train - val)))
+    allocation = {name: [] for name in SPLITS}
+    for index, group in enumerate(groups):
+        empty = [name for name in SPLITS if not allocation[name]]
+        chosen = empty[0] if len(groups) - index == len(empty) else max(
+            SPLITS, key=lambda name: goals[name] - len(allocation[name])
+        )
+        allocation[chosen].extend(group)
+    manifest = dict(version=1, seed=seed, raw_sha256=file_hash(raw), duplicates=duplicates,
+                    rejected_lines=rejected, splits={})
+    for name, split in allocation.items():
+        path = output / f"{name}.jsonl"
+        write_rows(path, split)
+        manifest["splits"][name] = dict(
+            sha256=file_hash(path), ids=[row["id"] for row in split], samples=len(split),
+            annotated_errors=sum(row["error_count"] for row in split),
+            clean_sentences=sum(row["error_count"] == 0 for row in split),
+            errors_per_sentence=dict(sorted(Counter(row["error_count"] for row in split).items())),
+        )
+    write_json(manifest_path, manifest)
+    return manifest
 
-    print(f"[*] Đã trích xuất được {len(records)} mẫu câu từ VSEC Corpus.")
-    total_errors = sum(r["error_count"] for r in records)
-    print(f"[*] Tổng số lỗi chính tả: {total_errors}")
 
-    # Xáo trộn dữ liệu với seed cố định để tái lập
-    random.seed(42)
-    random.shuffle(records)
-
-    # Chia tập train (80%), val (10%), test (10%)
-    n = len(records)
-    n_train = int(n * 0.8)
-    n_val = int(n * 0.1)
-
-    train_data = records[:n_train]
-    val_data = records[n_train:n_train + n_val]
-    test_data = records[n_train + n_val:]
-
-    # Ghi file JSONL
-    for name, data in [("train.jsonl", train_data), ("val.jsonl", val_data), ("test.jsonl", test_data)]:
-        out_path = PROCESSED_DIR / name
-        with open(out_path, "w", encoding="utf-8") as f:
-            for item in data:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"[*] Đã lưu {name}: {len(data)} mẫu câu ({out_path})")
-
-    # Cập nhật thêm câu sạch vào data/raw/raw_corpus.txt để bổ trợ từ điển và N-gram
-    raw_corpus_path = Path("data/raw/raw_corpus.txt")
-    if clean_sentences:
-        with open(raw_corpus_path, "w", encoding="utf-8") as f:
-            for s in clean_sentences:
-                f.write(s + "\n")
-        print(f"[*] Đã cập nhật ngữ liệu sạch vào {raw_corpus_path} ({len(clean_sentences)} câu)")
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--raw", type=Path, default=RAW)
+    parser.add_argument("--output", type=Path, default=PROCESSED)
+    parser.add_argument("--manifest", type=Path, default=MANIFEST)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+    if not args.raw.exists():
+        if args.raw != RAW:
+            parser.error(f"Không tìm thấy {args.raw}")
+        args.raw.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.raw.with_suffix(".download")
+        urlretrieve(URL, temporary)
+        temporary.replace(args.raw)
+    manifest = prepare(args.raw, args.output, args.manifest, args.seed)
+    print({name: info["samples"] for name, info in manifest["splits"].items()})
+    print(f"Trùng: {manifest['duplicates']}. Dòng không hợp lệ: {manifest['rejected_lines']}")
 
 
 if __name__ == "__main__":
-    download_vsec()
-    process_vsec()
+    main()
