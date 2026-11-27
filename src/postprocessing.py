@@ -1,4 +1,5 @@
 """Shared edit alignment and document-preserving spelling suggestions."""
+from itertools import groupby
 import re
 import unicodedata
 
@@ -7,7 +8,7 @@ from rapidfuzz.distance import Levenshtein
 
 WORD = regex.compile(r"[\p{L}\p{M}\p{N}]+")
 PROTECTED = regex.compile(
-    r"https?://[^\s<>]+|www\.[^\s<>]+|[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}"
+    r"(?i:https?://|www\.)[^\s<>]+|[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}"
     r"|[A-Za-z0-9_]+(?:[./_+#-][A-Za-z0-9_]+)+|(?:C\+\+|C#)(?!\w)"
     r"|\b(?:Python|JavaScript|TypeScript|HTML|CSS|SQL|PyTorch|ViT5|ByT5|BARTpho|OpenAI)\b"
     r"|\b\p{Lu}[\p{L}\p{M}]+(?:[ \t]+\p{Lu}[\p{L}\p{M}]+)+"
@@ -33,10 +34,29 @@ def is_protected(match, spans):
             or any(match.start() < end and match.end() > start for start, end in spans))
 
 
+def sentence_word_groups(text, max_words=128):
+    """Partition word spans at sentence boundaries outside protected regions."""
+    spans = protected_spans(text)
+    group = []
+    for match in WORD.finditer(text):
+        if group:
+            boundary = group[-1].end()
+            gap = text[boundary:match.start()]
+            sentence_end = re.search(r"[.!?…;\r\n]", gap) and not any(
+                start <= boundary and match.start() < end for start, end in spans
+            )
+            if len(group) >= max_words or sentence_end:
+                yield group
+                group = []
+        group.append(match)
+    if group:
+        yield group
+
+
 def error_category(original, replacement):
     a, b = original.casefold(), replacement.casefold()
     if without_accents(a) == without_accents(b):
-        return "Dấu tiếng Việt"
+        return "Thiếu dấu" if a.isascii() else "Sai dấu tiếng Việt"
     if len(a) != len(b):
         return "Thừa hoặc thiếu ký tự"
     if sorted(a) == sorted(b):
@@ -52,19 +72,41 @@ def word_suggestions(source, candidate, max_distance=None):
     output = [unicodedata.normalize("NFC", word) for word in output]
     spans = protected_spans(source)
     edits = []
-    for op in alignment(keys, output):
-        if op.tag != "replace":
+    for unchanged, group in groupby(alignment(keys, output), key=lambda op: op.tag == "equal"):
+        if unchanged:
             continue
-        for source_index, output_index in zip(range(op.src_start, op.src_end), range(op.dest_start, op.dest_end)):
-            match = words[source_index]
-            before, after = keys[source_index], output[output_index]
-            if is_protected(match, spans) or before.casefold() == after.casefold():
+        operations = list(group)
+        first, last = operations[0], operations[-1]
+        source_indices = range(first.src_start, last.src_end)
+        output_indices = range(first.dest_start, last.dest_end)
+        if len(source_indices) == len(output_indices):
+            pairs = [(range(i, i + 1), range(j, j + 1)) for i, j in zip(source_indices, output_indices)]
+        elif {len(source_indices), len(output_indices)} == {1, 2}:
+            pairs = [(source_indices, output_indices)]
+        else:
+            continue
+        for source_part, target_part in pairs:
+            matches = [words[i] for i in source_part]
+            if any(is_protected(match, spans) for match in matches):
                 continue
-            if max_distance is not None and Levenshtein.distance(before.casefold(), after.casefold()) > max_distance:
+            start, end = matches[0].start(), matches[-1].end()
+            before = " ".join(keys[i] for i in source_part)
+            after = " ".join(output[i] for i in target_part)
+            if before.casefold() == after.casefold():
+                continue
+            if len(source_part) != len(target_part):
+                if (len(matches) > 1 and not re.fullmatch(r"[ 	]+", source[matches[0].end():matches[-1].start()])):
+                    continue
+                joined = lambda text: without_accents(text.replace(" ", "").casefold())
+                if Levenshtein.distance(joined(before), joined(after)) > 1:
+                    continue
+            elif (max_distance is not None and without_accents(before.casefold()) != without_accents(after.casefold())
+                  and Levenshtein.distance(before.casefold(), after.casefold()) > max_distance):
                 continue
             after = after.capitalize() if before[0].isupper() else after.lower()
-            edits.append(dict(start=match.start(), end=match.end(), original_segment=match.group(),
-                              corrected_segment=after, category=error_category(before, after)))
+            category = "Tách hoặc ghép âm tiết" if len(source_part) != len(target_part) else error_category(before, after)
+            edits.append(dict(start=start, end=end, original_segment=source[start:end],
+                              corrected_segment=after, category=category))
     return edits
 
 
@@ -77,8 +119,12 @@ def apply_edits(text, edits):
 def document_chunks(text, fits):
     """Yield original slices with no source token silently truncated."""
     start = end = 0
+    spans = protected_spans(text)
     for match in re.finditer(r"\S+", text):
-        if end > start and ("\n" in text[end:match.start()] or not fits(text[start:match.end()])):
+        previous = text[start:end]
+        terminal = (previous.endswith((".", "!", "?", "…", ";"))
+                    and not any(a <= end - 1 < b for a, b in spans))
+        if end > start and (terminal or "\n" in text[end:match.start()] or not fits(text[start:match.end()])):
             yield start, text[start:end]
             start = end = match.start()
         if end == start:

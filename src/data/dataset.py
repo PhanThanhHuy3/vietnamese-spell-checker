@@ -1,121 +1,29 @@
-import json
-from pathlib import Path
-from typing import Any, Dict, List
-
-import torch
+"""Tokenize complete paired sentences and report rows exceeding the model limits."""
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer, DataCollatorForSeq2Seq
-
-# Tương thích với các phiên bản transformers mới (sửa lỗi Unigram Sequence/dict trong T5Tokenizer)
-try:
-    from transformers.models.t5 import tokenization_t5
-    _orig_t5_init = tokenization_t5.T5Tokenizer.__init__
-
-    def _patched_t5_init(self, *args, **kwargs):
-        if "vocab" in kwargs and isinstance(kwargs["vocab"], dict):
-            kwargs["vocab"] = [(k, float(v)) for k, v in kwargs["vocab"].items()]
-        elif len(args) > 0 and isinstance(args[0], dict):
-            args = ([(k, float(v)) for k, v in args[0].items()],) + args[1:]
-        return _orig_t5_init(self, *args, **kwargs)
-
-    tokenization_t5.T5Tokenizer.__init__ = _patched_t5_init
-except Exception:
-    pass
-
-from .preprocess import normalize_vietnamese_text
+from transformers import DataCollatorForSeq2Seq
 
 
 class SpellingDataset(Dataset):
-    """PyTorch Dataset đọc các cặp câu (input_text, target_text) từ file JSON Lines."""
+    def __init__(self, rows, tokenizer, max_source_length, max_target_length, prefix="spelling: "):
+        self.samples = []
+        self.excluded_ids = []
+        for row in rows:
+            source = tokenizer(prefix + row["input_text"], truncation=False, verbose=False)
+            target = tokenizer(text_target=row["target_text"], truncation=False, verbose=False)
+            if len(source["input_ids"]) > max_source_length or len(target["input_ids"]) > max_target_length:
+                self.excluded_ids.append(row["id"])
+                continue
+            source["labels"] = target["input_ids"]
+            self.samples.append(source)
+        if not self.samples:
+            raise ValueError("Không có cặp câu nào vừa giới hạn token")
 
-    def __init__(
-        self,
-        file_path: str | Path,
-        tokenizer: AutoTokenizer,
-        max_source_length: int = 128,
-        max_target_length: int = 128,
-        prefix: str = "spelling: ",
-    ):
-        self.file_path = Path(file_path)
-        self.tokenizer = tokenizer
-        self.max_source_length = max_source_length
-        self.max_target_length = max_target_length
-        self.prefix = prefix
-        self.data: List[Dict[str, str]] = self._load_data()
+    def __len__(self):
+        return len(self.samples)
 
-    def _load_data(self) -> List[Dict[str, str]]:
-        if not self.file_path.exists():
-            raise FileNotFoundError(f"Không tìm thấy file dataset: {self.file_path}")
-
-        samples = []
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                item = json.loads(line)
-                # Đảm bảo trường input_text và target_text tồn tại
-                input_text = normalize_vietnamese_text(item.get("input_text", ""))
-                target_text = normalize_vietnamese_text(item.get("target_text", ""))
-
-                if input_text and target_text:
-                    samples.append({
-                        "input_text": input_text,
-                        "target_text": target_text,
-                    })
-        return samples
-
-    def __len__(self) -> int:
-        return len(self.data)
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        sample = self.data[idx]
-        src_text = self.prefix + sample["input_text"]
-        tgt_text = sample["target_text"]
-
-        # Mã hóa đầu vào
-        model_inputs = self.tokenizer(
-            src_text,
-            max_length=self.max_source_length,
-            padding=False,
-            truncation=True,
-            return_tensors=None,
-        )
-
-        # Mã hóa nhãn đích
-        labels = self.tokenizer(
-            tgt_text,
-            max_length=self.max_target_length,
-            padding=False,
-            truncation=True,
-            return_tensors=None,
-        )
-
-        model_inputs["labels"] = labels["input_ids"]
-        return model_inputs
+    def __getitem__(self, index):
+        return self.samples[index]
 
 
-def build_data_collator(tokenizer: AutoTokenizer, model: Any = None) -> DataCollatorForSeq2Seq:
-    """Tạo DataCollator chuẩn của HuggingFace cho Seq2Seq, hỗ trợ padding linh hoạt."""
-    return DataCollatorForSeq2Seq(
-        tokenizer=tokenizer,
-        model=model,
-        padding=True,
-        label_pad_token_id=-100,
-        pad_to_multiple_of=8 if torch.cuda.is_available() else None,
-    )
-
-
-def load_and_cache_dataset(
-    file_path: str | Path,
-    tokenizer: AutoTokenizer,
-    max_source_length: int = 128,
-    max_target_length: int = 128,
-) -> SpellingDataset:
-    """Hàm tiện ích load dataset nhanh chóng."""
-    return SpellingDataset(
-        file_path=file_path,
-        tokenizer=tokenizer,
-        max_source_length=max_source_length,
-        max_target_length=max_target_length,
-    )
+def build_data_collator(tokenizer, model):
+    return DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding=True, label_pad_token_id=-100)

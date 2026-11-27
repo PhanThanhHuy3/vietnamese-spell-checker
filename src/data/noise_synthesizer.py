@@ -1,195 +1,168 @@
+"""Vietnamese spelling corruption shared by the trainer and web demo."""
 import random
-from typing import List
+import unicodedata
 
-from .preprocess import normalize_vietnamese_text
+from src.postprocessing import WORD, apply_edits, is_protected, protected_spans, without_accents
+
+TONE_MARKS = "\u0300\u0301\u0303\u0309\u0323"
+TELEX_MARKS = dict(zip(TONE_MARKS + "\u0306\u031b", "fsxrjww"))
+INITIALS = {"tr": "ch", "ch": "tr", "ngh": "ng", "ng": "ngh", "gi": "d", "d": "r",
+            "r": "gi", "s": "x", "x": "s", "l": "n", "n": "l"}
+FINALS = {"ng": "n", "n": "ng", "nh": "n", "t": "c", "c": "t"}
+ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
+
+
+NOISE_LABELS = {
+    "mixed": "Lỗi hỗn hợp", "full_diacritics": "Không dấu toàn câu",
+    "partial_diacritics": "Thiếu dấu một phần", "tone": "Sai dấu thanh",
+    "initial": "Phụ âm đầu", "final": "Phụ âm cuối", "vowel": "Sai nguyên âm",
+    "keyboard": "Gõ nhầm phím", "delete": "Thiếu ký tự", "insert": "Thừa ký tự",
+    "transpose": "Đảo ký tự", "telex": "Telex", "vni": "VNI",
+}
+
+
+def to_vni(word):
+    output, tones = [], []
+    modifiers = dict(zip("\u0302\u031b\u0306", "678"))
+    digits = dict(zip(TONE_MARKS, "12534"))
+    for char in unicodedata.normalize("NFD", word):
+        if char in digits:
+            tones.append(digits[char])
+        else:
+            output.append(modifiers.get(char, {"đ": "d9", "Đ": "D9"}.get(char, char)))
+    return "".join(output + tones)
+
+
+def to_telex(word):
+    decomposed = unicodedata.normalize("NFD", word)
+    keys, tones = [], []
+    previous = ""
+    for char in decomposed:
+        if char in TONE_MARKS:
+            tones.append(TELEX_MARKS[char])
+        elif char == "\u0302":
+            keys.append(previous.lower())
+        elif char in TELEX_MARKS:
+            keys.append(TELEX_MARKS[char])
+        else:
+            keys.append({"đ": "dd", "Đ": "Dd"}.get(char, char))
+            previous = char
+    return "".join(keys + tones)
 
 
 class VietnameseNoiseSynthesizer:
-    """Bộ sinh nhiễu lỗi chính tả Tiếng Việt tự động phục vụ bài toán huấn luyện mô hình.
-    Mô phỏng các loại lỗi thực tế:
-    1. Lỗi gõ Telex / Unikey
-    2. Lỗi ngữ âm / Phương ngữ (s/x, tr/ch, d/gi/r, l/n, c/k, hỏi/ngã, v.v.)
-    3. Lỗi khoảng cách bàn phím QWERTY (gõ nhầm phím lân cận)
-    4. Lỗi mất dấu thanh / rụng dấu
-    5. Lỗi cơ học (đảo vị trí ký tự, rụng ký tự, lặp ký tự)
-    """
+    def __init__(self, seed=None):
+        self.random = random.Random(seed)
 
-    def __init__(self, seed: int = 42):
-        random.seed(seed)
+    def options(self, word, extended=False):
+        decomposed = unicodedata.normalize("NFD", word)
+        marks = [c for c in decomposed if c in TONE_MARKS]
+        options = [("Thiếu dấu", without_accents(word))]
+        if marks:
+            wrong = "\u0303" if marks[0] == "\u0309" else "\u0309"
+            options.append(("Sai dấu thanh", unicodedata.normalize("NFC", decomposed.replace(marks[0], wrong, 1))))
+        for label, mapping, is_prefix in (("Phụ âm đầu", INITIALS, True), ("Phụ âm cuối", FINALS, False)):
+            lower = word.lower()
+            for key in sorted(mapping, key=len, reverse=True):
+                if len(word) > len(key) and (lower.startswith(key) if is_prefix else lower.endswith(key)):
+                    value = mapping[key]
+                    changed = value + lower[len(key):] if is_prefix else lower[:-len(key)] + value
+                    options.append((label, changed.capitalize() if word[0].isupper() else changed))
+                    break
+        options.append(("Telex", to_telex(word)))
+        if extended:
+            options.append(("VNI", to_vni(word)))
+            vowels = [i for i, char in enumerate(decomposed) if char.casefold() in "aeiouy"]
+            if vowels:
+                at = self.random.choice(vowels)
+                vowel = decomposed[at]
+                new_vowel = self.random.choice([c for c in "aeiouy" if c != vowel.casefold()])
+                if vowel.isupper():
+                    new_vowel = new_vowel.upper()
+                options.append(("Sai nguyên âm", unicodedata.normalize("NFC", decomposed[:at] + new_vowel + decomposed[at + 1:])))
+        index = self.random.randrange(len(word))
+        c = word[index]
+        for row in ROWS:
+            if c.lower() in row:
+                pos = row.index(c.lower())
+                adjacent = row[max(0, pos - 1):pos] + row[pos + 1:pos + 2]
+                key = self.random.choice(adjacent)
+                options.append(("Gõ nhầm phím", word[:index] + (key.upper() if c.isupper() else key) + word[index + 1:]))
+                break
+        options.append(("Thừa ký tự", word[:index] + c + word[index:]))
+        options.append(("Thiếu ký tự", word[:index] + word[index + 1:]))
+        swap = min(index, len(word) - 2)
+        options.append(("Đảo ký tự", word[:swap] + word[swap + 1] + word[swap] + word[swap + 2:]))
+        return [(kind, result) for kind, result in options if result and result != word]
 
-        # 1. Bảng thay thế ngữ âm / phương ngữ
-        self.phonetic_replacements = {
-            "tr": ["ch"],
-            "ch": ["tr"],
-            "s": ["x"],
-            "x": ["s"],
-            "d": ["gi", "r"],
-            "gi": ["d", "r"],
-            "r": ["d", "gi"],
-            "l": ["n"],
-            "n": ["l"],
-            "c": ["k"],
-            "k": ["c"],
-            "ngh": ["ng"],
-            "ng": ["ngh"],
-            "gh": ["g"],
-            "g": ["gh"],
-        }
+    def generate(self, text, noise_prob=.25, mode=None):
+        if not 0 <= noise_prob <= 1:
+            raise ValueError("Xác suất phải nằm trong khoảng 0 đến 1")
+        if mode is not None and mode not in NOISE_LABELS:
+            raise ValueError("Loại lỗi không hợp lệ.")
+        if noise_prob == 0:
+            return text, []
+        if mode in ("full_diacritics", "partial_diacritics", "mixed"):
+            return self.accent_variant(text, noise_prob, mode, with_edits=True)
+        protected = protected_spans(text)
+        edits = []
+        for match in WORD.finditer(text):
+            word = unicodedata.normalize("NFC", match.group())
+            if len(word) < 2 or not word.isalpha() or is_protected(match, protected):
+                continue
+            if self.random.random() < noise_prob:
+                options = self.options(word, extended=mode in ("vowel", "vni"))
+                if mode:
+                    options = [item for item in options if item[0] == NOISE_LABELS[mode]]
+                if not options:
+                    continue
+                label, changed = self.random.choice(options)
+                edits.append(dict(start=match.start(), end=match.end(), original_segment=match.group(),
+                                  corrected_segment=changed, category=label))
+        return apply_edits(text, edits), edits
 
-        # 2. Bảng lỗi dấu hỏi <-> ngã
-        self.hoi_nga_pairs = {
-            "ả": "ã", "ã": "ả",
-            "ẳ": "ẵ", "ẵ": "ẳ",
-            "ẩ": "ẫ", "ẫ": "ẩ",
-            "ẻ": "ẽ", "ẽ": "ẻ",
-            "ể": "ễ", "ễ": "ể",
-            "ỉ": "ĩ", "ĩ": "ỉ",
-            "ỏ": "õ", "õ": "ỏ",
-            "ổ": "ỗ", "ỗ": "ổ",
-            "ở": "ỡ", "ỡ": "ở",
-            "ủ": "ũ", "ũ": "ủ",
-            "ử": "ữ", "ữ": "ử",
-            "ỷ": "ỹ", "ỹ": "ỷ",
-        }
-
-        # 3. Bảng gỡ bỏ dấu thanh (mất dấu)
-        self.remove_tones = {
-            "à": "a", "á": "a", "ả": "a", "ã": "a", "ạ": "a",
-            "ằ": "ă", "ắ": "ă", "ẳ": "ă", "ẵ": "ă", "ặ": "ă",
-            "ầ": "â", "ấ": "â", "ẩ": "â", "ẫ": "â", "ậ": "â",
-            "è": "e", "é": "e", "ẻ": "e", "ẽ": "e", "ẹ": "e",
-            "ề": "ê", "ế": "ê", "ể": "ê", "ễ": "ê", "ệ": "ê",
-            "ì": "i", "í": "i", "ỉ": "i", "ĩ": "i", "ị": "i",
-            "ò": "o", "ó": "o", "ỏ": "o", "õ": "o", "ọ": "o",
-            "ồ": "ô", "ố": "ô", "ổ": "ô", "ỗ": "ô", "ộ": "ô",
-            "ờ": "ơ", "ớ": "ơ", "ở": "ơ", "ỡ": "ơ", "ợ": "ơ",
-            "ù": "u", "ú": "u", "ủ": "u", "ũ": "u", "ụ": "u",
-            "ừ": "ư", "ứ": "ư", "ử": "ư", "ữ": "ư", "ự": "ư",
-            "ỳ": "y", "ý": "y", "ỷ": "y", "ỹ": "y", "ỵ": "y",
-        }
-
-        # 4. Bàn phím QWERTY lân cận
-        self.qwerty_neighbors = {
-            "q": ["w", "a"], "w": ["q", "e", "s"], "e": ["w", "r", "d"],
-            "r": ["e", "t", "f"], "t": ["r", "y", "g"], "y": ["t", "u", "h"],
-            "u": ["y", "i", "j"], "i": ["u", "o", "k"], "o": ["i", "p", "l"],
-            "p": ["o", "l"], "a": ["q", "s", "z"], "s": ["a", "d", "w", "x"],
-            "d": ["s", "f", "e", "c"], "f": ["d", "g", "r", "v"],
-            "g": ["f", "h", "t", "b"], "h": ["g", "j", "y", "n"],
-            "j": ["h", "k", "u", "m"], "k": ["j", "l", "i"], "l": ["k", "o", "p"],
-            "z": ["a", "x"], "x": ["z", "c", "s"], "c": ["x", "v", "d"],
-            "v": ["c", "b", "f"], "b": ["v", "n", "g"], "n": ["b", "m", "h"],
-            "m": ["n", "j"],
-        }
-
-        # 5. Lỗi gõ thừa phím telex
-        self.telex_keys = ["s", "f", "r", "x", "j", "w", "a", "e", "o", "d"]
-
-    def _corrupt_phonetics(self, word: str) -> str:
-        """Thay thế các cặp âm phương ngữ dễ nhầm lẫn."""
-        lower_word = word.lower()
-        for k, v in self.phonetic_replacements.items():
-            if lower_word.startswith(k):
-                replacement = random.choice(v)
-                if word[0].isupper():
-                    replacement = replacement.capitalize()
-                return replacement + word[len(k):]
-        return word
-
-    def _corrupt_hoi_nga(self, word: str) -> str:
-        """Đổi dấu hỏi thành ngã hoặc ngược lại."""
-        chars = list(word)
-        for i, c in enumerate(chars):
-            if c.lower() in self.hoi_nga_pairs:
-                is_upper = c.isupper()
-                new_c = self.hoi_nga_pairs[c.lower()]
-                chars[i] = new_c.upper() if is_upper else new_c
-                return "".join(chars)
-        return word
-
-    def _corrupt_remove_tone(self, word: str) -> str:
-        """Mất dấu thanh."""
-        chars = list(word)
-        for i, c in enumerate(chars):
-            if c.lower() in self.remove_tones:
-                is_upper = c.isupper()
-                new_c = self.remove_tones[c.lower()]
-                chars[i] = new_c.upper() if is_upper else new_c
-                return "".join(chars)
-        return word
-
-    def _corrupt_keyboard(self, word: str) -> str:
-        """Gõ nhầm phím lân cận trên bàn phím QWERTY."""
-        if len(word) < 2:
-            return word
-        chars = list(word)
-        idx = random.randint(0, len(chars) - 1)
-        c = chars[idx].lower()
-        if c in self.qwerty_neighbors:
-            neighbor = random.choice(self.qwerty_neighbors[c])
-            chars[idx] = neighbor.upper() if chars[idx].isupper() else neighbor
-        return "".join(chars)
-
-    def _corrupt_telex_tail(self, word: str) -> str:
-        """Dính đuôi phím telex do bộ gõ tiếng Việt bị lỗi (vd: 'người' -> 'nguowif')."""
-        tail = random.choice(self.telex_keys)
-        return word + tail
-
-    def _corrupt_swap_or_drop(self, word: str) -> str:
-        """Đảo vị trí hai ký tự hoặc làm rơi một ký tự."""
-        if len(word) < 3:
-            return word
-        chars = list(word)
-        op = random.choice(["swap", "drop", "duplicate"])
-        idx = random.randint(0, len(chars) - 2)
-
-        if op == "swap":
-            chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
-        elif op == "drop":
-            chars.pop(idx)
-        elif op == "duplicate":
-            chars.insert(idx, chars[idx])
-
-        return "".join(chars)
-
-    def corrupt_word(self, word: str) -> str:
-        """Tạo lỗi cho một từ đơn lẻ theo xác suất các loại lỗi."""
-        if len(word) <= 1 or not word.isalnum():
-            return word
-
-        corruption_types = [
-            self._corrupt_phonetics,
-            self._corrupt_hoi_nga,
-            self._corrupt_remove_tone,
-            self._corrupt_keyboard,
-            self._corrupt_telex_tail,
-            self._corrupt_swap_or_drop,
-        ]
-
-        # Chọn ngẫu nhiên 1 chiến lược làm nhiễu
-        strategy = random.choice(corruption_types)
-        return strategy(word)
-
-    def add_noise(self, text: str, noise_prob: float = 0.25) -> str:
-        """Thêm nhiễu ngẫu nhiên vào toàn bộ câu văn bản.
-
-        Args:
-            text: Câu văn bản tiếng Việt sạch (clean text).
-            noise_prob: Xác suất một từ bị làm nhiễu (mặc định 25%).
-
-        Returns:
-            Câu văn bản bị làm nhiễu (noisy/corrupted text).
-        """
-        text = normalize_vietnamese_text(text)
-        words = text.split()
-        if not words:
-            return ""
-
-        corrupted_words = []
-        for word in words:
-            if random.random() < noise_prob:
-                corrupted_words.append(self.corrupt_word(word))
+    def accent_variant(self, text, probability, mode, with_edits=False):
+        """Build a full, partial or mixed accent variant for supervised training."""
+        if not 0 <= probability <= 1:
+            raise ValueError("Xác suất phải nằm trong khoảng 0 đến 1")
+        if probability == 0:
+            return (text, []) if with_edits else text
+        protected = protected_spans(text)
+        words = [match for match in WORD.finditer(text)
+                 if match.group().isalpha() and not is_protected(match, protected)]
+        accented = [match for match in words if without_accents(match.group()) != match.group()]
+        if not accented:
+            return (text, []) if with_edits else text
+        if mode == "full_diacritics":
+            changed = accented
+        elif mode in ("partial_diacritics", "mixed"):
+            if len(accented) < 2:
+                return (text, []) if with_edits else text
+            changed = [match for match in accented if self.random.random() < probability]
+            if not changed:
+                changed = [self.random.choice(accented)]
+            if len(changed) == len(accented):
+                changed.pop(self.random.randrange(len(changed)))
+        else:
+            raise ValueError(f"Nhóm tạo nhiễu không hợp lệ: {mode}")
+        edits = [dict(start=match.start(), end=match.end(), original_segment=match.group(),
+                      category=NOISE_LABELS["full_diacritics" if mode == "full_diacritics" else "partial_diacritics"],
+                      corrected_segment=without_accents(match.group())) for match in changed]
+        if mode == "mixed":
+            available = [match for match in words if match not in changed and len(match.group()) >= 2]
+            self.random.shuffle(available)
+            for match in available:
+                options = [item for item in self.options(match.group()) if item[0] != "Thiếu dấu"]
+                if options:
+                    label, replacement = self.random.choice(options)
+                    edits.append(dict(start=match.start(), end=match.end(), original_segment=match.group(),
+                                      category=label, corrected_segment=replacement))
+                    break
             else:
-                corrupted_words.append(word)
+                return (text, []) if with_edits else text
+        edits.sort(key=lambda edit: edit["start"])
+        result = apply_edits(text, edits)
+        return (result, edits) if with_edits else result
 
-        return " ".join(corrupted_words)
+    def add_noise(self, text, noise_prob=.25):
+        return self.generate(text, noise_prob)[0]

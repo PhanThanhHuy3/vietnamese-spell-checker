@@ -1,61 +1,40 @@
+"""Kiểm tra chính tả bằng cùng mô hình và định dạng kết quả với website."""
 import argparse
+import json
 from pathlib import Path
-from src.smart_corrector import SmartVietnameseCorrector
+
+from src.data.prepare_vsec import ROOT
+from src.inference import MODEL_PATHS, CorrectionService, ModelUnavailable
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Chương trình thử nghiệm sửa lỗi chính tả Tiếng Việt.")
-    parser.add_argument("--text", type=str, default=None, help="Câu văn bản cần sửa lỗi")
-    parser.add_argument("--model_path", type=str, default=None, help="Đường dẫn mô hình checkpoint (tùy chọn)")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--text")
+    parser.add_argument("--model", choices=("auto", "baseline", *MODEL_PATHS), default="auto")
+    parser.add_argument("--model_path", type=Path)
     args = parser.parse_args()
+    if args.model_path and args.model not in MODEL_PATHS:
+        parser.error("Chọn vit5 hoặc byt5 khi chỉ định checkpoint")
+    paths = {**MODEL_PATHS, args.model: args.model_path.resolve()} if args.model_path else None
+    service = CorrectionService(ROOT, paths)
 
-    print("[*] Đang khởi động bộ kiểm tra chính tả tiếng Việt...")
-    corrector = SmartVietnameseCorrector(model_path=args.model_path)
-    engine_name = "Deep Learning (ViT5)" if corrector.use_ai else "Smart Heuristic & Phonetic Engine"
-    print(f"[*] Chế độ hoạt động: {engine_name}")
-    print("[*] Sẵn sàng!\n")
+    def show(text):
+        print(json.dumps(service.correct(text, args.model), ensure_ascii=False, indent=2))
 
-    if args.text:
-        res = corrector.check_and_correct(args.text)
-        print("=" * 60)
-        print(f"Câu gốc   : {res['original_text']}")
-        print(f"Câu sửa   : {res['corrected_text']}")
-        if res["has_error"]:
-            print(f"Phát hiện lỗi ({len(res['errors_found'])} vị trí):")
-            for err in res["errors_found"]:
-                print(f"  -> '{err['original_segment']}' ==> '{err['corrected_segment']}'")
-        else:
-            print("✓ Không phát hiện lỗi chính tả.")
-        print("=" * 60)
+    try:
+        if args.text is not None:
+            show(args.text)
+            return
+        while True:
+            text = input("Nhập văn bản (exit để thoát): ")
+            if text.strip().lower() == "exit":
+                return
+            if text.strip():
+                show(text)
+    except (KeyboardInterrupt, EOFError):
         return
-
-    # Chế độ tương tác nhập trực tiếp từ bàn phím
-    print("=" * 60)
-    print("  CHẾ ĐỘ TƯƠNG TÁC SỬA LỖI CHÍNH TẢ TIẾNG VIỆT (Gõ 'exit' để thoát)")
-    print("=" * 60)
-
-    while True:
-        try:
-            user_input = input("\nNhập câu cần kiểm tra: ").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ["exit", "quit", "q"]:
-                print("Tạm biệt!")
-                break
-
-            result = corrector.check_and_correct(user_input)
-            print("-" * 50)
-            print(f"Kết quả sửa: {result['corrected_text']}")
-            if result["has_error"]:
-                print(f"Chi tiết chỉnh sửa ({len(result['errors_found'])} lỗi):")
-                for err in result["errors_found"]:
-                    print(f"  - '{err['original_segment']}' => '{err['corrected_segment']}'")
-            else:
-                print("✓ Câu chuẩn, không phát hiện lỗi.")
-            print("-" * 50)
-        except (KeyboardInterrupt, EOFError):
-            print("\nĐã thoát chương trình.")
-            break
+    except ModelUnavailable as exc:
+        parser.exit(1, f"{exc}\n")
 
 
 if __name__ == "__main__":

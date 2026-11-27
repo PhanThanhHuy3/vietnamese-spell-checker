@@ -1,92 +1,51 @@
+"""Transformer inference and checkpoint persistence."""
 from pathlib import Path
-from typing import List, Union
 
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-# Tương thích với các phiên bản transformers mới (sửa lỗi Unigram Sequence/dict trong T5Tokenizer)
-try:
-    from transformers.models.t5 import tokenization_t5
-    _orig_t5_init = tokenization_t5.T5Tokenizer.__init__
-
-    def _patched_t5_init(self, *args, **kwargs):
-        if "vocab" in kwargs and isinstance(kwargs["vocab"], dict):
-            kwargs["vocab"] = [(k, float(v)) for k, v in kwargs["vocab"].items()]
-        elif len(args) > 0 and isinstance(args[0], dict):
-            args = ([(k, float(v)) for k, v in args[0].items()],) + args[1:]
-        return _orig_t5_init(self, *args, **kwargs)
-
-    tokenization_t5.T5Tokenizer.__init__ = _patched_t5_init
-except Exception:
-    pass
+from src.data.preprocess import normalize_vietnamese_text
 
 
 class VietnameseSpellCorrector:
-    """Wrapper cho mô hình Seq2Seq (ViT5) phục vụ bài toán phát hiện & sửa lỗi chính tả."""
+    def __init__(self, model_name_or_path, device=None, local_only=False):
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, local_files_only=local_only)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path, local_files_only=local_only)
+        self.model.to(self.device).eval()
 
-    def __init__(
-        self,
-        model_name_or_path: str = "VietAI/vit5-base",
-        device: torch.device | None = None,
-    ):
-        self.model_name_or_path = model_name_or_path
-        self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    def fits(self, text, source_limit, prefix="spelling: "):
+        ids = self.tokenizer.encode(prefix + normalize_vietnamese_text(text), verbose=False)
+        return len(ids) <= source_limit
 
-        # Khởi tạo Tokenizer và Model (ưu tiên nạp từ cache offline)
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, local_files_only=True)
-        except Exception:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    @torch.inference_mode()
+    def generate(self, texts, source_limit, target_limit, beams=4, prefix="spelling: "):
+        if not texts:
+            return []
+        encoded = self.tokenizer([prefix + normalize_vietnamese_text(t) for t in texts],
+                                 padding=True, truncation=False, return_tensors="pt", verbose=False)
+        if encoded.input_ids.shape[1] > source_limit:
+            raise ValueError("Đầu vào vượt giới hạn token")
+        generated = self.model.generate(
+            **encoded.to(self.device), max_new_tokens=target_limit, num_beams=beams,
+            no_repeat_ngram_size=0, repetition_penalty=1.0, early_stopping=beams > 1,
+            return_dict_in_generate=True, output_scores=True,
+        )
+        scores = self.model.compute_transition_scores(
+            generated.sequences, generated.scores, getattr(generated, "beam_indices", None),
+            normalize_logits=True,
+        )
+        generated_ids = generated.sequences[:, -scores.shape[1]:]
+        eos = self.model.generation_config.eos_token_id
+        token_scores = []
+        for ids, row in zip(generated_ids.tolist(), scores.tolist()):
+            end = ids.index(eos) + 1 if eos in ids else 0
+            token_scores.append(sum(row[:end]) / end if end else None)
+        return list(zip(self.tokenizer.batch_decode(generated.sequences, skip_special_tokens=True),
+                        token_scores))
 
-        try:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path, local_files_only=True)
-        except Exception:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
-        self.model.to(self.device)
-        self.model.eval()
-
-    def correct(
-        self,
-        texts: Union[str, List[str]],
-        max_length: int = 96,
-        num_beams: int = 4,
-        prefix: str = "spelling: ",
-    ) -> Union[str, List[str]]:
-        """Sửa lỗi chính tả cho một câu hoặc một danh sách câu."""
-        is_single = isinstance(texts, str)
-        if is_single:
-            texts = [texts]
-
-        inputs = [prefix + text for text in texts]
-        encoded = self.tokenizer(
-            inputs,
-            padding=True,
-            truncation=True,
-            max_length=max_length,
-            return_tensors="pt",
-        ).to(self.device)
-
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **encoded,
-                max_length=max_length,
-                num_beams=num_beams,
-                no_repeat_ngram_size=4,
-                repetition_penalty=1.2,
-                early_stopping=True,
-            )
-
-        corrected = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        return corrected[0] if is_single else corrected
-
-    def save_pretrained(self, save_dir: Union[str, Path]) -> None:
-        """Lưu trọng số mô hình và tokenizer vào thư mục đích."""
-        save_path = Path(save_dir)
-        save_path.mkdir(parents=True, exist_ok=True)
-        self.model.save_pretrained(str(save_path))
-        self.tokenizer.save_pretrained(str(save_path))
-
-    @classmethod
-    def from_pretrained(cls, save_dir: Union[str, Path], device: torch.device | None = None) -> "VietnameseSpellCorrector":
-        """Load mô hình đã huấn luyện từ thư mục checkpoint."""
-        return cls(model_name_or_path=str(save_dir), device=device)
+    def save_pretrained(self, path):
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        self.model.save_pretrained(path)
+        self.tokenizer.save_pretrained(path)

@@ -1,238 +1,130 @@
-"""Script đánh giá toàn diện mô hình sửa lỗi chính tả tiếng Việt.
-
-Các chỉ số định lượng được tính:
-  - Accuracy   : Token Accuracy (cấp âm tiết)
-  - Precision  : Precision phát hiện lỗi (syllable-level)
-  - Recall     : Recall phát hiện lỗi (syllable-level)
-  - F1-score   : F1 phát hiện lỗi (syllable-level)
-  - BLEU       : BLEU-4 (sacrebleu)
-  - Exact Match: Tỷ lệ câu dự đoán hoàn toàn chính xác
-  - CER        : Character Error Rate
-  - WER        : Word Error Rate
-"""
-
+"""Evaluate a train-only baseline or a verified checkpoint on the same VSEC split."""
 import argparse
+from datetime import datetime, timezone
 import json
-from datetime import datetime
 from pathlib import Path
+import re
 
-from tqdm import tqdm
-
-from src.models.spell_corrector import VietnameseSpellCorrector
-from src.training.metrics import (
-    compute_bleu,
-    compute_cer,
-    compute_detection_metrics,
-    compute_exact_match,
-    compute_token_accuracy,
-    compute_wer,
-)
-from src.utils.helpers import get_device, load_config
-from src.utils.logger import setup_logger
-
-logger = setup_logger("evaluate")
-
-EVAL_RESULTS_JSON = Path("logs/eval_results.json")
-EVAL_RESULTS_MD   = Path("logs/EVALUATION.md")
+from src.data.noise_synthesizer import VietnameseNoiseSynthesizer
+from src.data.prepare_vsec import ROOT, content_keys, file_hash, read_rows, text_key, write_json, write_rows
+from src.data.validate_split import validate
+from src.inference import MODEL_PATHS, SpellInferencePipeline, checkpoint_metadata
+from src.data.context_corpus import context_sentences
+from src.models.baseline import NgramBaseline
+from src.training.metrics import summarize
+from src.postprocessing import apply_edits, without_accents
 
 
-def _load_existing_results() -> dict:
-    if EVAL_RESULTS_JSON.exists():
-        try:
-            with open(EVAL_RESULTS_JSON, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"runs": {}}
-
-
-def _save_results(all_results: dict) -> None:
-    all_results["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    EVAL_RESULTS_JSON.parent.mkdir(parents=True, exist_ok=True)
-    with open(EVAL_RESULTS_JSON, "w", encoding="utf-8") as f:
-        json.dump(all_results, f, ensure_ascii=False, indent=2)
-
-
-def _update_markdown(all_results: dict) -> None:
-    """Ghi lại bảng Markdown so sánh tất cả model đã evaluate."""
-    lines = [
-        "# Bảng Kết Quả Đánh Giá (Evaluation Report)\n",
-        f"Cập nhật lần cuối: {all_results.get('updated_at', '—')}\n",
-        "",
-        "Tập test: VSEC test split (không dùng để chọn model).",
-        "Chỉ số phát hiện lỗi tính ở cấp âm tiết.",
-        "",
-        "| Model | #Câu | EM (%) | BLEU | Accuracy (%) | CER (%) | WER (%) | Det-P (%) | Det-R (%) | Det-F1 (%) |",
-        "|---|---|---|---|---|---|---|---|---|---|",
-    ]
-
-    def _pct(value, default=0.0):
-        """Chuẩn hóa cả giá trị dạng 0..1 (bản ghi cũ) và 0..100 (bản ghi mới)."""
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
-            value = default
-        return value * 100 if value <= 1.0 else value
-
-    for run_name, run_data in all_results.get("runs", {}).items():
-        m = run_data.get("metrics", {})
-        det = m.get("detection", {})
-        lines.append(
-            f"| {run_name} "
-            f"| {m.get('num_samples', '—')} "
-            f"| {_pct(m.get('exact_match', 0)):.2f} "
-            f"| {m.get('bleu', 0):.2f} "
-            f"| {_pct(m.get('token_accuracy', m.get('syllable_accuracy', 0))):.2f} "
-            f"| {_pct(m.get('cer', 0)):.2f} "
-            f"| {_pct(m.get('wer', 0)):.2f} "
-            f"| {_pct(det.get('precision', 0)):.2f} "
-            f"| {_pct(det.get('recall', 0)):.2f} "
-            f"| {_pct(det.get('f1', 0)):.2f} |"
-        )
-
-    lines.append("")
-    lines.append("> Bảng được sinh tự động bởi `python evaluate.py`.")
-
-    EVAL_RESULTS_MD.parent.mkdir(parents=True, exist_ok=True)
-    with open(EVAL_RESULTS_MD, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+def stress_metrics(predict, targets, train_rows):
+    forbidden = {without_accents(key) for row in train_rows for key in content_keys(row)}
+    generator = VietnameseNoiseSynthesizer(seed=42)
+    results = {}
+    for mode in ("full_diacritics", "partial_diacritics", "mixed"):
+        sources, gold = [], []
+        for text in targets:
+            variant = generator.accent_variant(text, .35, mode)
+            if variant != text and without_accents(text_key(variant)) not in forbidden:
+                sources.append(variant)
+                gold.append(text)
+        if sources:
+            metrics = summarize(predict(sources), sources, gold)
+            metrics.pop("failures")
+            results[mode] = metrics
+    return results
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Đánh giá toàn diện mô hình sửa lỗi chính tả tiếng Việt."
-    )
-    parser.add_argument(
-        "--config", type=str, default="configs/config.yaml",
-        help="Đường dẫn file cấu hình"
-    )
-    parser.add_argument(
-        "--model_path", type=str, default=None,
-        help="Đường dẫn tới checkpoint mô hình cần đánh giá"
-    )
-    parser.add_argument(
-        "--test_file", type=str, default=None,
-        help="Đường dẫn tới file test.jsonl"
-    )
-    parser.add_argument(
-        "--run_name", type=str, default=None,
-        help="Tên định danh cho lần evaluate này (ghi vào bảng so sánh)"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=16,
-        help="Batch size khi chạy inference (mặc định: 16)"
-    )
-    parser.add_argument(
-        "--num_examples", type=int, default=5,
-        help="Số ví dụ thực tế hiển thị sau khi đánh giá (mặc định: 5)"
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=("baseline", *MODEL_PATHS), default="baseline")
+    parser.add_argument("--model_path", type=Path)
+    parser.add_argument("--split", choices=("val", "test", "practice", "challenge"), default="test")
+    parser.add_argument("--run_name")
+    parser.add_argument("--unrestricted-distance", action="store_true")
+    parser.add_argument("--allow-smoke", action="store_true")
+    parser.add_argument("--stress", action="store_true", help="Đo riêng các nhóm lỗi trên biến thể của tập đánh giá")
     args = parser.parse_args()
+    run = args.run_name or args.model
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", run) or run in (".", ".."):
+        parser.error("Tên lần chạy không hợp lệ")
+    splits, manifest = validate()
+    if args.split in ("practice", "challenge"):
+        path = ROOT / "data" / f"{args.split}.jsonl"
+        rows, digest = read_rows(path), file_hash(path)
+    else:
+        rows, digest = splits[args.split], manifest["splits"][args.split]["sha256"]
+    source = [row["input_text"] for row in rows]
+    target = [row["target_text"] for row in rows]
+    meta = None
+    if args.model == "baseline":
+        engine = NgramBaseline(splits["train"], context_sentences(splits))
+        predict = lambda texts: [engine.correct(text) for text in texts]
+    else:
+        path = args.model_path or ROOT / MODEL_PATHS[args.model]
+        meta = checkpoint_metadata(path, manifest)
+        if meta["model_key"] != args.model or (meta.get("smoke") and not args.allow_smoke):
+            parser.error("Checkpoint không phù hợp với phép đánh giá")
+        engine = SpellInferencePipeline(path, meta, conservative=not args.unrestricted_distance)
+        predict = engine.correct_many
+    def predict_batches(texts):
+        results = []
+        for index in range(0, len(texts), 16):
+            results.extend(predict(texts[index:index + 16]))
+        return results
 
-    config = load_config(args.config)
-    model_path = args.model_path or str(Path(config["training"]["output_dir"]) / "best_model")
-    test_file  = Path(args.test_file or config["data"]["test_file"])
-
-    if not Path(model_path).exists():
-        logger.warning(
-            f"Chưa tìm thấy checkpoint tại '{model_path}'. "
-            f"Dùng baseline model '{config['model']['name_or_path']}'."
-        )
-        model_path = config["model"]["name_or_path"]
-
-    if not test_file.exists():
-        logger.error(f"Không tìm thấy file kiểm thử tại: {test_file}")
-        return
-
-    # --- 1. Nạp model ---
-    device = get_device()
-    logger.info(f"Đang tải mô hình từ: {model_path} trên {device}...")
-    corrector = VietnameseSpellCorrector(model_name_or_path=model_path, device=device)
-
-    # --- 2. Đọc dữ liệu test ---
-    inputs, targets = [], []
-    with open(test_file, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                item = json.loads(line)
-                inputs.append(item["input_text"])
-                targets.append(item["target_text"])
-
-    logger.info(f"Số lượng câu kiểm thử: {len(inputs)}. Đang tiến hành dự đoán...")
-
-    # --- 3. Chạy inference theo batch ---
-    predictions = []
-    max_len = config["model"]["max_target_length"]
-
-    for i in tqdm(range(0, len(inputs), args.batch_size), desc="Đánh giá"):
-        batch_inputs = inputs[i: i + args.batch_size]
-        batch_preds  = corrector.correct(batch_inputs, max_length=max_len)
-        predictions.extend(batch_preds)
-
-    # --- 4. Tính toán tất cả chỉ số định lượng ---
-    em             = compute_exact_match(predictions, targets)
-    cer            = compute_cer(predictions, targets)
-    wer            = compute_wer(predictions, targets)
-    bleu           = compute_bleu(predictions, targets)
-    token_acc      = compute_token_accuracy(predictions, targets)
-    detection      = compute_detection_metrics(predictions, inputs, targets)
-
-    # --- 5. Hiển thị kết quả ---
-    sep = "=" * 65
-    print(f"\n{sep}")
-    print(f"      KẾT QUẢ ĐÁNH GIÁ — {Path(model_path).name}")
-    print(sep)
-    print(f"  Số câu kiểm thử    : {len(inputs)}")
-    print(f"  Model              : {model_path}")
-    print(sep)
-    print("  [Chỉ số Chỉnh sửa (Correction Metrics)]")
-    print(f"  Exact Match (EM)   : {em * 100:.2f}%")
-    print(f"  Token Accuracy     : {token_acc * 100:.2f}%")
-    print(f"  BLEU-4             : {bleu:.2f}")
-    print(f"  CER (↓ tốt hơn)   : {cer * 100:.2f}%")
-    print(f"  WER (↓ tốt hơn)   : {wer * 100:.2f}%")
-    print(sep)
-    print("  [Chỉ số Phát Hiện Lỗi (Detection Metrics — syllable-level)]")
-    print(f"  Precision          : {detection['precision']:.2f}%")
-    print(f"  Recall             : {detection['recall']:.2f}%")
-    print(f"  F1-score           : {detection['f1']:.2f}%")
-    print(f"  TP / FP / FN       : {detection['true_positive']} / {detection['false_positive']} / {detection['false_negative']}")
-    print(sep)
-
-    # --- 6. Hiển thị ví dụ thực tế ---
-    if args.num_examples > 0:
-        print(f"\n{'─' * 65}")
-        print(f"  VÍ DỤ THỰC TẾ (hiển thị {min(args.num_examples, len(inputs))} câu)")
-        print(f"{'─' * 65}")
-        for idx in range(min(args.num_examples, len(inputs))):
-            print(f"  [{idx + 1}]")
-            print(f"   Input  : {inputs[idx]}")
-            print(f"   Target : {targets[idx]}")
-            print(f"   Predict: {predictions[idx]}")
-            is_correct = predictions[idx].strip() == targets[idx].strip()
-            print(f"   Status : {'✓ ĐÚNG' if is_correct else '✗ SAI'}")
-            print(f"  {'─' * 60}")
-
-    # --- 7. Lưu kết quả vào logs/ ---
-    run_label = args.run_name or Path(model_path).name
-    all_results = _load_existing_results()
-    all_results["runs"][run_label] = {
-        "model_path":   model_path,
-        "test_file":    str(test_file),
-        "evaluated_at": datetime.now().isoformat(timespec="seconds"),
-        "metrics": {
-            "num_samples":   len(inputs),
-            "exact_match":   round(em, 6),
-            "token_accuracy": round(token_acc, 6),
-            "bleu":          round(bleu, 4),
-            "cer":           round(cer, 6),
-            "wer":           round(wer, 6),
-            "detection":     detection,
-        },
+    predictions = predict_batches(source)
+    if args.split == "challenge":
+        accepted_targets = [(row["target_text"], *row.get("acceptable_targets", ())) for row in rows]
+        scoring_targets = [prediction if prediction in choices else choices[0]
+                           for prediction, choices in zip(predictions, accepted_targets, strict=True)]
+        metrics = summarize(predictions, source, scoring_targets)
+        groups = {}
+        for index, row in enumerate(rows):
+            phase = groups.setdefault(row["phase"], {"samples": 0, "exact": 0, "clean": 0, "clean_preserved": 0})
+            phase["samples"] += 1
+            phase["exact"] += predictions[index] in accepted_targets[index]
+            if row["input_text"] == row["target_text"]:
+                phase["clean"] += 1
+                phase["clean_preserved"] += predictions[index] == row["input_text"]
+        metrics["challenge_phases"] = groups
+        if args.model == "baseline":
+            auto_predictions = [apply_edits(text, [edit for edit in engine.suggest(text) if edit["auto_apply"]])
+                                for text in source]
+            metrics["automatic_exact"] = sum(p in choices for p, choices in zip(auto_predictions, accepted_targets, strict=True))
+        else:
+            auto_predictions = predictions
+    else:
+        metrics = summarize(predictions, source, target)
+        auto_predictions = None
+    clean_predictions = predict_batches(target)
+    clean_modified = sum(p != t for p, t in zip(clean_predictions, target, strict=True))
+    metrics["clean_reference_control"] = {
+        "samples": len(target), "modified": clean_modified,
+        "rate": clean_modified / len(target),
     }
-    _save_results(all_results)
-    _update_markdown(all_results)
-
-    logger.info(f"Đã lưu kết quả vào {EVAL_RESULTS_JSON} và {EVAL_RESULTS_MD}")
+    if args.stress:
+        metrics["noise_groups"] = stress_metrics(predict_batches, target, splits["train"])
+    failures = {entry["index"]: entry for entry in metrics.pop("failures")}
+    output = ROOT / "experiments" / "results" / args.split
+    write_rows(output / f"{run}.predictions.jsonl", [
+        dict(id=row["id"], input_text=row["input_text"], target_text=row["target_text"],
+             prediction=prediction, errors=failures.get(index),
+             **({"automatic_prediction": auto_predictions[index], "phase": row["phase"]}
+                if auto_predictions is not None else {}))
+        for index, (row, prediction) in enumerate(zip(rows, predictions, strict=True))
+    ])
+    result = dict(
+        run=run, model=args.model, split=args.split, split_sha256=digest,
+        train_sha256=manifest["splits"]["train"]["sha256"], metrics=metrics,
+        smoke=bool(meta and meta.get("smoke")), training_id=meta["training_id"] if meta else None,
+        generation=(meta["generation"] if meta else None), conservative=not args.unrestricted_distance,
+        evaluated_at=datetime.now(timezone.utc).isoformat(),
+        history=meta["history"] if meta else [], error_examples=[
+            dict(id=rows[i]["id"], source=source[i], reference=target[i], prediction=predictions[i], **failure)
+            for i, failure in list(failures.items())[:10]
+        ],
+    )
+    write_json(output / f"{run}.json", result)
+    print(json.dumps(metrics, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

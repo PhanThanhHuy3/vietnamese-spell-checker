@@ -1,29 +1,15 @@
-# Quản lý Dữ liệu (Data Management)
+# Dữ liệu VSEC
 
-Thư mục này dùng để lưu trữ và quản lý dữ liệu huấn luyện cho bài toán Sửa lỗi chính tả Tiếng Việt.
+`python -X utf8 -m src.data.prepare_vsec` đọc tệp VSEC JSONL chính thức, khôi phục cặp câu từ annotation, chuẩn hóa NFC và khoảng trắng, giữ dấu câu, nhóm nội dung trùng, rồi chia cố định với seed 42. Annotation có đề xuất chuỗi rỗng tạo thao tác xóa. Annotation rỗng tạo bởi khoảng trắng kép được bỏ qua khi ghép câu. Annotation có nhiều đề xuất dùng đề xuất đầu làm tham chiếu chính.
 
-## 1. Cấu trúc thư mục
-- `raw/`: Chứa dữ liệu văn bản thô (clean text từ báo chí, Wikipedia tiếng Việt, v.v.) chưa qua xử lý hoặc các bộ dữ liệu gốc thu thập được.
-- `synthetic/`: Chứa dữ liệu được sinh nhiễu nhân tạo (tạo lỗi telex, lỗi phương ngữ, gõ sai bàn phím, thiếu dấu) từ dữ liệu sạch.
-- `processed/`: Chứa dữ liệu đã qua tiền xử lý, định dạng chuẩn (train.jsonl, val.jsonl, test.jsonl) sẵn sàng đưa vào mô hình.
+`data/splits/split_manifest.json` lưu ID, SHA-256 và thống kê. Chạy `python -X utf8 -m src.data.validate_split` để xác minh ba tập được sinh đúng từ manifest. Khóa so trùng bỏ khác biệt hoa thường, dấu câu và khoảng trắng, đồng thời giữ dấu tiếng Việt.
 
-## 2. Định dạng dữ liệu chuẩn (JSON Lines - `.jsonl`)
-Mỗi dòng trong file dữ liệu là một JSON object:
-```json
-{
-  "id": "sample_001",
-  "input_text": "Hôm nay chời mưa to quá, tôi quến mang ô.",
-  "target_text": "Hôm nay trời mưa to quá, tôi quên mang ô."
-}
-```
+`python -X utf8 generate_noise_data.py --size 5000 --noise_prob 0.2` tạo dữ liệu bổ sung trong `data/synthetic/train.jsonl`. Mỗi dòng chứa `parent_id` từ train. Pipeline tạo ba nhóm gồm mất dấu toàn câu, mất dấu một phần và lỗi hỗn hợp. Câu chuẩn có thể thêm bằng tùy chọn --identity-size. Pipeline loại các biến thể va chạm với nội dung validation hoặc test, kể cả khi bỏ dấu để kiểm tra. `train.py` dùng cùng hàm tăng cường với các tham số của lần thực nghiệm.
 
-## 3. Các loại lỗi chính tả tiếng Việt thường gặp:
-1. **Lỗi gõ Telex / Unikey**: `hoangf` -> `hoàng` (lỗi không nhận dấu), `nhaf` -> `nhà`, `thìe` -> `thì`.
-2. **Lỗi phương ngữ (Homophones / Regional variants)**:
-   - Phụ âm đầu: `ch` <-> `tr`, `s` <-> `x`, `d` <-> `gi` <-> `r`, `l` <-> `n`.
-   - Phụ âm cuối: `c` <-> `t` (`manh mẽ` -> `mạnh mẽ`, `bắt` -> `bắc`), `n` <-> `ng` (`buồn` -> `buồng`).
-   - Dấu thanh: `hỏi` <-> `ngã` (`sữa` <-> `sửa`, `nghĩ` <-> `nghỉ`).
-3. **Lỗi gõ phím lân cận (Keyboard Distance - QWERTY)**:
-   - Gõ nhầm phím kế bên (ví dụ: `a` nhầm sang `s`, `q`, `w`).
-4. **Lỗi dấu thanh và nguyên âm**:
-   - Thiếu dấu hoặc đặt sai vị trí dấu (`hoà` vs `hòa`, `thuyển` vs `thuyền`).
+`data/practice.jsonl` là các mẫu soạn tay để kiểm tra hành vi theo đặc tả.
+
+Nguồn [VSEC Corpus](https://github.com/VSEC2021/VSEC).
+
+## Ngữ liệu cho bộ khôi phục dấu
+
+Bản xuất chi tiết tiếng Việt của Tatoeba được lưu trong data/context để có thể chạy ngoại tuyến. Dữ liệu cung cấp thống kê ngữ cảnh cho bộ giải mã N-gram. Luồng fine-tuning ViT5 tiếp tục dùng VSEC Train và các biến thể sinh từ đó. Trình nạp loại nội dung trùng với bất kỳ bản ghi VSEC hay mẫu thực hành nào sau khi chuẩn hóa và bỏ dấu. Xem [nguồn và thông tin ghi công](context/README.md).

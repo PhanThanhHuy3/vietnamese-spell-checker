@@ -1,0 +1,80 @@
+{"id":"dev_1","phase":"development","input_text":"Tuần này tôi phải nộp bải báo cáo, nhưng máy tín lại hỏng.","target_text":"Tuần này tôi phải nộp bài báo cáo, nhưng máy tính lại hỏng."}
+{"id":"dev_2","phase":"development","input_text":"Bác sĩ dặn tôi uốn thuốc sau bữa ăn và nghĩ ngơi đầy đủ.","target_text":"Bác sĩ dặn tôi uống thuốc sau bữa ăn và nghỉ ngơi đầy đủ."}
+{"id":"dev_3","phase":"development","input_text":"Nhân viên kiểm tra ổ cấm điện trước khi rời phồng.","target_text":"Nhân viên kiểm tra ổ cắm điện trước khi rời phòng."}
+{"id":"dev_4","phase":"development","input_text":"Cô ấy đã chả lại cuốn sách mượn ở thư diện.","target_text":"Cô ấy đã trả lại cuốn sách mượn ở thư viện."}
+{"id":"dev_5","phase":"development","input_text":"Mai toi se gui tai lieu cho ban, neu ban can gap thi goi cho toi.","target_text":"Mai tôi sẽ gửi tài liệu cho bạn, nếu bạn cần gấp thì gọi cho tôi.","acceptable_targets":["Mai tôi sẽ gửi tài liệu cho bạn, nếu bạn cần gặp thì gọi cho tôi."]}
+{"id":"dev_6","phase":"development","input_text":"sang mai chung ta gap nhau o cong vien nhe","target_text":"sáng mai chúng ta gặp nhau ở công viên nhé"}
+{"id":"dev_7","phase":"development","input_text":"Toi muon mua ve tau tu Ha Noi di Da Nang.","target_text":"Tôi muốn mua vé tàu từ Ha Noi đi Da Nang."}
+{"id":"dev_8","phase":"development","input_text":"Chị ấy đả gửi thư cho đồng ngiệp trước buổi họp.","target_text":"Chị ấy đã gửi thư cho đồng nghiệp trước buổi họp."}
+{"id":"dev_9","phase":"development","input_text":"Xin hảy giữ trật tự trong phồng đọc sách.","target_text":"Xin hãy giữ trật tự trong phòng đọc sách."}
+{"id":"dev_10","phase":"development","input_text":"Chuơng trình mới sẽ giãi quyết vấnn đề này.","target_text":"Chương trình mới sẽ giải quyết vấn đề này."}
+{"id":"dev_11","phase":"development","input_text":"Tôi đã qunê mang chìa khóa khi ra khỏi nhà.","target_text":"Tôi đã quên mang chìa khóa khi ra khỏi nhà."}
+{"id":"dev_12","phase":"development","input_text":"Sáng mai tôi sễ gặp bác sỹ ở bệnh viện.","target_text":"Sáng mai tôi sẽ gặp bác sỹ ở bệnh viện."}
+{"id":"dev_13","phase":"development","input_text":"Họ phải điền đầy đũ thông tin vào biểu mẩu.","target_text":"Họ phải điền đầy đủ thông tin vào biểu mẫu."}
+{"id":"dev_14","phase":"development","input_text":"Mẹ tôi đi chợ để mua rau, cá và một chai dâu ăn.","target_text":"Mẹ tôi đi chợ để mua rau, cá và một chai dầu ăn."}
+{"id":"dev_15","phase":"development","input_text":"Tôi nghĩ ở nhà ngày mai cũng được.","target_text":"Tôi nghĩ ở nhà ngày mai cũng được."}
+{"id":"dev_16","phase":"development","input_text":"Tôi sẽ nghỉ ở nhà ngày mai.","target_text":"Tôi sẽ nghỉ ở nhà ngày mai."}
+{"id":"dev_17","phase":"development","input_text":"Con nai đứng bên bờ suối.","target_text":"Con nai đứng bên bờ suối."}
+{"id":"dev_18","phase":"development","input_text":"Bác thợ đang sửa chiếc máy vắt sữa.","target_text":"Bác thợ đang sửa chiếc máy vắt sữa."}
+{"id":"dev_19","phase":"development","input_text":"Tôi đi ăn tối với một người bạn.","target_text":"Tôi đi ăn tối với một người bạn."}
+{"id":"dev_20","phase":"development","input_text":"Khi trời tối, chúng tôi tưới cây.","target_text":"Khi trời tối, chúng tôi tưới cây."}
+{"id":"dev_21","phase":"development","input_text":"Tôi dùng GitHub, Node.js và C++ trong dự án này.","target_text":"Tôi dùng GitHub, Node.js và C++ trong dự án này."}
+{"id":"dev_22","phase":"development","input_text":"Đọc tệp README.md rồi gửi cho p.nguyen+dev@example.com.","target_text":"Đọc tệp README.md rồi gửi cho p.nguyen+dev@example.com."}
+{"id":"dev_23","phase":"development","input_text":"Chị Mai Anh ở Buôn Ma Thuột hẹn gặp tôi vào thứ Sáu.","target_text":"Chị Mai Anh ở Buôn Ma Thuột hẹn gặp tôi vào thứ Sáu."}
+{"id":"dev_24","phase":"development","input_text":"Không ai trả lời.Khi nào chúng ta bắt đầu?","target_text":"Không ai trả lời.Khi nào chúng ta bắt đầu?"}
+{"id":"dev_25","phase":"development","input_text":"Kết quả đo là 3,14 ± 0,02 ở lần thử thứ hai.","target_text":"Kết quả đo là 3,14 ± 0,02 ở lần thử thứ hai."}
+{"id":"dev_26","phase":"development","input_text":"Chiều nay,chúng em học lập chình ở phòng 203.","target_text":"Chiều nay,chúng em học lập trình ở phòng 203."}
+{"id":"dev_27","phase":"development","input_text":"Đây là một bàikiểm tra rất khó.","target_text":"Đây là một bài kiểm tra rất khó."}
+{"id":"dev_28","phase":"development","input_text":"Chúng tôi đã chuẩn bị k ế hoạch cho ngày mai.","target_text":"Chúng tôi đã chuẩn bị kế hoạch cho ngày mai."}
+{"id":"dev_29","phase":"development","input_text":"toi dang hoc Python. Mai toi se gui email.","target_text":"tôi đang học Python. Mai tôi sẽ gửi email."}
+{"id":"dev_30","phase":"development","input_text":"Bé thích ăn đậu, còn bố đang nấu dầu ăn.","target_text":"Bé thích ăn đậu, còn bố đang nấu dầu ăn."}
+{"id":"dev_31","phase":"development","input_text":"Bạn hãy giử lại hóa đơn để đổi hàng.","target_text":"Bạn hãy giữ lại hóa đơn để đổi hàng."}
+{"id":"dev_32","phase":"development","input_text":"Mọi người thảo lụân về phương án mới.","target_text":"Mọi người thảo luận về phương án mới."}
+{"id":"dev_33","phase":"development","input_text":"Chị ấy chụp ảnh con xóc trong rừng.","target_text":"Chị ấy chụp ảnh con sóc trong rừng."}
+{"id":"dev_34","phase":"development","input_text":"Chiếc xe chở hàng chạy qua con đường gập gền.","target_text":"Chiếc xe chở hàng chạy qua con đường gập ghềnh."}
+{"id":"dev_35","phase":"development","input_text":"Người phụ trách đã xác nhạn lịch hẹn qua email.","target_text":"Người phụ trách đã xác nhận lịch hẹn qua email."}
+{"id":"holdout_1","phase":"regression","input_text":"Sáng nay tôi đã đặt lịhc hẹn khám qua điện thoại.","target_text":"Sáng nay tôi đã đặt lịch hẹn khám qua điện thoại."}
+{"id":"holdout_2","phase":"regression","input_text":"Bản hướng dẫn yêu cầu gắn dây an toàng trước khi khởi động máy.","target_text":"Bản hướng dẫn yêu cầu gắn dây an toàn trước khi khởi động máy."}
+{"id":"holdout_3","phase":"regression","input_text":"Nhóm sẽ thảo luân về kế hoặch triển khai vào thứ Tư.","target_text":"Nhóm sẽ thảo luận về kế hoạch triển khai vào thứ Tư."}
+{"id":"holdout_4","phase":"regression","input_text":"Nếu thấy khói, hãy ngắc nguồn điện và gọi người phụ trách.","target_text":"Nếu thấy khói, hãy ngắt nguồn điện và gọi người phụ trách."}
+{"id":"holdout_5","phase":"regression","input_text":"chi nhanh ngan hang mo cua luc bay gio sang","target_text":"chi nhánh ngân hàng mở cửa lúc bảy giờ sáng"}
+{"id":"holdout_6","phase":"regression","input_text":"anh ay da nop don xin nghi viec","target_text":"anh ấy đã nộp đơn xin nghỉ việc"}
+{"id":"holdout_7","phase":"regression","input_text":"cho toi hoi, nha thuoc nam o dau?","target_text":"cho tôi hỏi, nhà thuốc nằm ở đâu?"}
+{"id":"holdout_8","phase":"regression","input_text":"toi muon dat mot phong co cua so gan bien","target_text":"tôi muốn đặt một phòng có cửa sổ gần biển"}
+{"id":"holdout_9","phase":"regression","input_text":"Vui lòng kiễm tra địa chỉ nhận hàng trước khi xác nhậnn.","target_text":"Vui lòng kiểm tra địa chỉ nhận hàng trước khi xác nhận."}
+{"id":"holdout_10","phase":"regression","input_text":"Anh ấy để chìa khóa trên bànr rồi đi ra ngoài.","target_text":"Anh ấy để chìa khóa trên bàn rồi đi ra ngoài."}
+{"id":"holdout_11","phase":"regression","input_text":"Lớp em đang chuẩnbị cho buổi biểu diễn cuối năm.","target_text":"Lớp em đang chuẩn bị cho buổi biểu diễn cuối năm."}
+{"id":"holdout_12","phase":"regression","input_text":"Buổi họp kéo dài vì nhiều người chưa thống nh ất ý kiến.","target_text":"Buổi họp kéo dài vì nhiều người chưa thống nhất ý kiến."}
+{"id":"holdout_13","phase":"regression","input_text":"Giá là 12.500,50 ₫ và sai số cho phép là ±0,05%.","target_text":"Giá là 12.500,50 ₫ và sai số cho phép là ±0,05%."}
+{"id":"holdout_14","phase":"regression","input_text":"Tôi lưu tệp .gitignore trong thư mục dự án rồi chạy npm test.","target_text":"Tôi lưu tệp .gitignore trong thư mục dự án rồi chạy npm test."}
+{"id":"holdout_15","phase":"regression","input_text":"Bạn có thể gửi bản nháp tới nhóm qua dev.team+qa@example.org.","target_text":"Bạn có thể gửi bản nháp tới nhóm qua dev.team+qa@example.org."}
+{"id":"holdout_16","phase":"regression","input_text":"chị Phương Linh sẽ ghé phố cổ Hội An vào chiều thứ Bảy.","target_text":"chị Phương Linh sẽ ghé phố cổ Hội An vào chiều thứ Bảy."}
+{"id":"holdout_17","phase":"regression","input_text":"Mẹ mua dâu tây, rau cải và hai chai dầu ăn.","target_text":"Mẹ mua dâu tây, rau cải và hai chai dầu ăn."}
+{"id":"holdout_18","phase":"regression","input_text":"Em bé đang ngủ ngon, đừng làm bé thức giấc.","target_text":"Em bé đang ngủ ngon, đừng làm bé thức giấc."}
+{"id":"holdout_19","phase":"regression","input_text":"Tôi luyện đàn ở nhà mỗi tối; âm thanh nhỏ dần.","target_text":"Tôi luyện đàn ở nhà mỗi tối; âm thanh nhỏ dần."}
+{"id":"holdout_20","phase":"regression","input_text":"Công ty bảo trì hệ thóng trong khung giờ ít truy cập.","target_text":"Công ty bảo trì hệ thống trong khung giờ ít truy cập."}
+{"id":"holdout_21","phase":"regression","input_text":"Làm ơn tắc đèn ở hành lang trước khi khóa cửa.","target_text":"Làm ơn tắt đèn ở hành lang trước khi khóa cửa."}
+{"id":"holdout_22","phase":"regression","input_text":"Thời tiếc chuyển lạnh bất ngờ nên cả nhóm mang thêm áo khoác.","target_text":"Thời tiết chuyển lạnh bất ngờ nên cả nhóm mang thêm áo khoác."}
+{"id":"holdout_23","phase":"regression","input_text":"Xin đừng thay chữ Đ trong mã “Đ-203” hoặc sửa đường dẫn https://example.org/a-b?q=1.","target_text":"Xin đừng thay chữ Đ trong mã “Đ-203” hoặc sửa đường dẫn https://example.org/a-b?q=1."}
+{"id":"holdout_24","phase":"regression","input_text":"bao cao da duoc gui luc 9 gio. Neu can, hay goi cho toi.","target_text":"báo cáo đã được gửi lúc 9 giờ. Nếu cần, hãy gọi cho tôi."}
+{"id":"holdout_25","phase":"regression","input_text":"Trời mưa tầm tã nhưng chiếc ô của em bị rác.","target_text":"Trời mưa tầm tã nhưng chiếc ô của em bị rách."}
+{"id":"audit_1","phase":"audit","input_text":"Chúng tôi quyết định dời lịch kiểm tra sang sáng thứ Năm.","target_text":"Chúng tôi quyết định dời lịch kiểm tra sang sáng thứ Năm."}
+{"id":"audit_2","phase":"audit","input_text":"Khi đến ngã ba, hãy rẽ phải rồi đi thẵng đến cuối đường.","target_text":"Khi đến ngã ba, hãy rẽ phải rồi đi thẳng đến cuối đường."}
+{"id":"audit_3","phase":"audit","input_text":"Hệ thống báo lổi kết nối, vui lòng thử lại sau vài phút.","target_text":"Hệ thống báo lỗi kết nối, vui lòng thử lại sau vài phút."}
+{"id":"audit_4","phase":"audit","input_text":"phien hop duoc to chuc vao sang thu hai tai van phong","target_text":"phiên họp được tổ chức vào sáng thứ hai tại văn phòng"}
+{"id":"audit_5","phase":"audit","input_text":"xin giu im lang trong phong doc sach","target_text":"xin giữ im lặng trong phòng đọc sách"}
+{"id":"audit_6","phase":"audit","input_text":"toi quen mang theo hop dong nen phai quay lai","target_text":"tôi quên mang theo hợp đồng nên phải quay lại"}
+{"id":"audit_7","phase":"audit","input_text":"Chúng em sẽ tổng họp kết quả và gửi trước chiều thứ Sáu.","target_text":"Chúng em sẽ tổng hợp kết quả và gửi trước chiều thứ Sáu."}
+{"id":"audit_8","phase":"audit","input_text":"Khi mưa lớn, nước có thể tràng vào tầng hầm.","target_text":"Khi mưa lớn, nước có thể tràn vào tầng hầm."}
+{"id":"audit_9","phase":"audit","input_text":"Buổi chiều, cô giáo hướng dẩn cả lớp cách gấp máy bay giấy.","target_text":"Buổi chiều, cô giáo hướng dẫn cả lớp cách gấp máy bay giấy."}
+{"id":"audit_10","phase":"audit","input_text":"Em không muốn ăn thịt, nhưng sẽ ăn hết rau.","target_text":"Em không muốn ăn thịt, nhưng sẽ ăn hết rau."}
+{"id":"audit_11","phase":"audit","input_text":"Nhân viên đã bậc quạt để làm mát căn phòng.","target_text":"Nhân viên đã bật quạt để làm mát căn phòng."}
+{"id":"audit_12","phase":"audit","input_text":"Đơn hàng đã được bàn giao tại Số 18, đường Nguyễn Trãi.","target_text":"Đơn hàng đã được bàn giao tại Số 18, đường Nguyễn Trãi."}
+{"id":"audit_13","phase":"audit","input_text":"Nhớ đính kèm bãng tính trước khi gửi cho finance+ops@example.org.","target_text":"Nhớ đính kèm bảng tính trước khi gửi cho finance+ops@example.org."}
+{"id":"audit_14","phase":"audit","input_text":"Bé khẽ mở cánh cữa rồi lặng lẽ bước vào.","target_text":"Bé khẽ mở cánh cửa rồi lặng lẽ bước vào."}
+{"id":"audit_15","phase":"audit","input_text":"Tôi đã nhập mã AB-123 và mở liên kết https://example.org/viec-lam?x=2.","target_text":"Tôi đã nhập mã AB-123 và mở liên kết https://example.org/viec-lam?x=2."}
+{"id":"audit_16","phase":"audit","input_text":"Đội kỷ thuật cần kiểm tra thiết bị trước giờ chạy thử.","target_text":"Đội kỹ thuật cần kiểm tra thiết bị trước giờ chạy thử."}
+{"id":"audit_17","phase":"audit","input_text":"Có thể sửa lỗi này bằng cách khởỉ động lại ứng dụng.","target_text":"Có thể sửa lỗi này bằng cách khởi động lại ứng dụng."}
+{"id":"audit_18","phase":"audit","input_text":"ban co the gui cho toi dia chi cua hang khong?","target_text":"bạn có thể gửi cho tôi địa chỉ cửa hàng không?"}
+{"id":"audit_19","phase":"audit","input_text":"Ấm nước bị nứt nên bà đặt nó xuống bàn.","target_text":"Ấm nước bị nứt nên bà đặt nó xuống bàn."}
+{"id":"audit_20","phase":"audit","input_text":"Mong bạn giữ nguyên khoảng cách  2,5 m.\nĐây là vạch báo an toàn.","target_text":"Mong bạn giữ nguyên khoảng cách  2,5 m.\nĐây là vạch báo an toàn."}

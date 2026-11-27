@@ -58,13 +58,16 @@ def parse_record(row, position):
     inputs, targets = [], []
     for ann in annotations:
         current = normalize(ann["current_syllable"])
-        target = current if ann["is_correct"] else normalize(ann["alternative_syllables"][0])
-        if not current or not target or not isinstance(ann["is_correct"], bool):
+        alternative = current if ann["is_correct"] else ann["alternative_syllables"][0]
+        if not isinstance(ann["current_syllable"], str) or not isinstance(alternative, str) or not isinstance(ann["is_correct"], bool):
             raise ValueError("Annotation không hợp lệ")
         inputs.append(current)
-        targets.append(target)
+        targets.append(normalize(alternative))
+    target_text = " ".join(filter(None, targets))
+    if not target_text:
+        raise ValueError("Không có câu đích")
     return dict(id=f"vsec_{position:05d}", source_text=source,
-                input_text=" ".join(inputs), target_text=" ".join(targets),
+                input_text=" ".join(filter(None, inputs)), target_text=target_text,
                 error_count=sum(a != b for a, b in zip(inputs, targets)))
 
 
@@ -89,11 +92,14 @@ def group_rows(rows):
 
 def prepare(raw=RAW, output=PROCESSED, manifest_path=MANIFEST, seed=42):
     rows, rejected, seen = [], [], set()
+    annotation_counts = {}
     duplicates = 0
     with raw.open(encoding="utf-8-sig") as handle:
         for position, line in enumerate(handle, 1):
             try:
-                row = parse_record(json.loads(line), position)
+                raw_row = json.loads(line)
+                row = parse_record(raw_row, position)
+                annotation_counts[row["id"]] = sum(not a["is_correct"] for a in raw_row["annotations"])
             except (ValueError, TypeError, KeyError, IndexError, AttributeError):
                 rejected.append(position)
                 continue
@@ -130,9 +136,9 @@ def prepare(raw=RAW, output=PROCESSED, manifest_path=MANIFEST, seed=42):
         write_rows(path, split)
         manifest["splits"][name] = dict(
             sha256=file_hash(path), ids=[row["id"] for row in split], samples=len(split),
-            annotated_errors=sum(row["error_count"] for row in split),
-            clean_sentences=sum(row["error_count"] == 0 for row in split),
-            errors_per_sentence=dict(sorted(Counter(row["error_count"] for row in split).items())),
+            annotated_errors=sum(annotation_counts[row["id"]] for row in split),
+            clean_sentences=sum(row["input_text"] == row["target_text"] for row in split),
+            errors_per_sentence=dict(sorted(Counter(annotation_counts[row["id"]] for row in split).items())),
         )
     write_json(manifest_path, manifest)
     return manifest

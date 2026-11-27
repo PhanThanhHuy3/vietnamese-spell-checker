@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VietSpell AI · Kiểm tra chính tả tiếng Việt</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a href="#home" class="brand"><span aria-hidden="true">V</span> VietSpell AI</a>
+    <nav aria-label="Chức năng">
+      <a href="#home">Trang chủ</a><a href="#check">Kiểm tra</a><a href="#compare">So sánh</a>
+      <a href="#dataset">Dữ liệu</a><a href="#noise">Sinh lỗi</a><a href="#report">Thực nghiệm</a><a href="#models">Mô hình</a>
+    </nav>
+  </header>
+  <main>
+    <section id="home">
+      <div class="hero"><p class="eyebrow">XỬ LÝ NGÔN NGỮ TỰ NHIÊN</p>
+        <h1>Kiểm tra chính tả tiếng Việt</h1>
+        <p>Phát hiện âm tiết có thể sai, xem gợi ý theo ngữ cảnh và áp dụng từng thay đổi.</p>
+        <a class="button" href="#check">Kiểm tra văn bản</a>
+      </div>
+      <div class="grid">
+        <article><h2>Baseline</h2><p>Khôi phục dấu theo ngữ cảnh từ VSEC Train và Tatoeba. Sửa lỗi gõ bằng N-gram và Levenshtein.</p></article>
+        <article><h2>ViT5 và ByT5</h2><p>Hai mô hình Transformer Encoder–Decoder cho bài toán chuyển câu sai thành câu đúng.</p><a href="#models">Xem trạng thái checkpoint</a></article>
+      </div>
+    </section>
+    <section id="check" hidden>
+      <h1>Kiểm tra chính tả</h1>
+      <form id="check-form" class="panel">
+        <label for="check-text">Văn bản tiếng Việt</label>
+        <textarea id="check-text" lang="vi" spellcheck="false" maxlength="4000" required>Hôm nai tôi đến chường để học lập chình.</textarea>
+        <div class="controls">
+          <label for="check-model">Mô hình</label>
+          <select id="check-model" aria-describedby="check-model-info" required>
+            <option value="auto">Tự chọn mô hình (Khuyên dùng)</option>
+          </select>
+          <button type="submit" value="check">Kiểm tra chính tả</button>
+          <button type="submit" value="apply" class="secondary">Sửa tự động</button><button id="reset" type="button" class="secondary">Đặt lại</button>
+          <output id="syllables"></output>
+        </div>
+        <p class="model-info" id="check-model-info" role="status">Đang tải trạng thái mô hình…</p>
+        <a href="#models">Lý do một số mô hình chưa chọn được</a>
+      </form>
+      <p id="check-status" role="status"></p>
+      <div id="check-result" class="grid" hidden>
+        <article><h2>Văn bản gốc</h2><div id="annotation" class="text-output"></div></article>
+        <article><h2>Văn bản sau khi áp dụng</h2><div id="corrected" class="text-output"></div>
+          <div class="controls result-actions">
+            <button id="copy-result" type="button" class="secondary">Sao chép</button>
+            <button id="undo-all" type="button" class="secondary">Hoàn tác tất cả</button>
+          </div>
+          <p id="copy-status" role="status"></p>
+        </article>
+        <article class="wide"><div class="controls"><h2>Gợi ý sửa</h2><button id="apply-all" type="button">Sửa tất cả</button></div>
+          <ul id="suggestions"></ul></article>
+      </div>
+    </section>
+    <section id="compare" hidden>
+      <h1>So sánh mô hình</h1>
+      <form id="compare-form" class="panel">
+        <label for="compare-text">Cùng một văn bản đầu vào</label>
+        <textarea id="compare-text" maxlength="4000" required>Hôm nai tôi đến chường để học lập chình.</textarea>
+        <button type="submit">So sánh</button>
+      </form>
+      <p id="compare-status" role="status"></p><div id="comparison" class="grid"></div>
+    </section>
+    <section id="dataset" hidden>
+      <h1>Khám phá VSEC</h1><p id="dataset-summary" role="status"></p>
+      <div class="table-wrap"><table><thead><tr><th>Tập</th><th>Số câu</th><th>Vị trí lỗi gán nhãn</th><th>Câu sạch</th></tr></thead><tbody id="dataset-table"></tbody></table></div>
+      <div id="distribution" class="panel chart"></div>
+    </section>
+    <section id="noise" hidden>
+      <h1>Sinh lỗi nhân tạo</h1>
+      <form id="noise-form" class="panel">
+        <label for="noise-text">Câu sạch</label><textarea id="noise-text" maxlength="4000" required>Tôi đang học công nghệ thông tin.</textarea>
+        <div class="controls"><label for="noise-prob">Xác suất mỗi âm tiết</label><input id="noise-prob" type="range" min="0" max="1" step="0.05" value="0.3"><output id="noise-value">30%</output><button type="submit">Sinh lỗi</button></div>
+      </form>
+      <p id="noise-status" role="status"></p><div id="noise-result" class="panel text-output" hidden></div><ul id="noise-list"></ul>
+    </section>
+    <section id="report" hidden>
+      <h1>Báo cáo thực nghiệm</h1><p id="report-status" role="status"></p>
+      <label for="report-split">Tập đánh giá</label>
+      <select id="report-split"><option value="test">VSEC Test</option><option value="val">VSEC Validation</option><option value="practice">Mẫu tình huống soạn tay</option><option value="challenge">Câu thử thách ngoài bộ mẫu</option></select>
+      <div class="table-wrap"><table><thead><tr id="report-header"></tr></thead><tbody id="report-table"></tbody></table></div>
+      <div id="report-details" class="grid"></div>
+    </section>
+    <section id="models" hidden>
+      <h1>Thông tin mô hình</h1><p id="model-status" role="status"></p><div id="model-cards" class="grid"></div>
+    </section>
+  </main>
+  <footer>VietSpell AI · Đồ án Deep Learning và Xử lý ngôn ngữ tự nhiên</footer>
+</body>
+</html>

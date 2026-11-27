@@ -1,240 +1,57 @@
-# 🇻🇳 Phát Hiện và Tự Động Sửa Lỗi Chính Tả Tiếng Việt
-*(Vietnamese Automated Spelling Correction and Error Detection using Deep Learning & Transformers)*
+# VietSpell AI
 
-Dự án áp dụng mô hình **Transformer Seq2Seq (ViT5)** và **PyTorch** để phát hiện và tự động sửa các loại lỗi chính tả tiếng Việt thường gặp: lỗi gõ Telex/VNI, lỗi ngữ âm/phương ngữ (ch/tr, s/x, d/gi/r), lỗi dấu hỏi/ngã, rụng dấu, nhầm phím QWERTY, v.v.
+Phát hiện vị trí sai chính tả trong văn bản tiếng Việt và gợi ý âm tiết thay thế theo ngữ cảnh. Website cho phép xem văn bản gốc, áp dụng từng thay đổi, hoàn tác và sửa tất cả.
 
-Hệ thống sử dụng **VSEC Corpus** — bộ dữ liệu chuẩn tiếng Việt với 9.341 câu và 11.202 lỗi chính tả thực tế được gán nhãn thủ công.
+## Chạy trên máy
 
----
+Từ thư mục dự án, chạy bằng Python 3.10 trở lên.
 
-## 🧠 Kiến Trúc Mô Hình
-
-### Mô hình Deep Learning Chính: ViT5 (Transformer Seq2Seq)
-
-```
-Input câu lỗi → [Encoder ViT5] → [Decoder ViT5] → Output câu đã sửa
-                    T5-base            Beam Search
-                  (SentencePiece       num_beams=4
-                   tokenization)
+```sh
+python -m pip install -r requirements.txt
+python -X utf8 -m src.data.prepare_vsec
+python -X utf8 -m src.data.validate_split
+python -X utf8 evaluate.py --model baseline
+python -X utf8 app.py
 ```
 
-- **Kiến trúc**: T5 Encoder-Decoder (Transformer), ~226M parameters
-- **Pretrained backbone**: `VietAI/vit5-base` (pretrained trên 100GB văn bản tiếng Việt)
-- **Finetuning**: Cross-Entropy Loss, AdamW optimizer, Warmup Scheduler
-- **Decoding**: Beam Search (`num_beams=4`, `no_repeat_ngram_size=4`, `repetition_penalty=1.2`)
-- **Checkpoint hiện tại**: 1 epoch, 283 global step, batch 16 × gradient accumulation 2,
-  learning rate 2e-4, max length 96 token. Huấn luyện trên CPU ~99 phút; train loss cuối 0.0666,
-  eval loss cuối 0.0456.
+Mở [VietSpell AI](http://127.0.0.1:7860/#check). Baseline N-gram + Levenshtein chạy trên CPU. Bộ khôi phục dấu tìm chuỗi âm tiết bằng beam search từ thống kê VSEC Train và ngữ liệu tiếng Việt Tatoeba. Hệ thống giữ phương án thay thế cho những âm tiết có nhiều cách thêm dấu. Trình kiểm tra chọn ViT5 khi có checkpoint triển khai đã xác minh. Có thể dùng cùng pipeline từ dòng lệnh.
 
-### Mô hình Bổ Sung: Smart Corrector (N-gram + Levenshtein)
-
-- Từ điển Viet74K (underthesea) + pyvi + VSEC corpus
-- Bigram Language Model (bigram scored candidates)
-- Khoảng cách Levenshtein để tìm từ sửa đổi gần nhất
-- Bộ giải mã Telex, VNI, Teencode, phương ngữ Bắc-Trung-Nam
-
----
-
-## 📁 Cấu Trúc Thư Mục
-
-```text
-vietnamese-spell-checker/
-├── configs/
-│   └── config.yaml                   # Hyperparameters (lr, batch, epochs, beam…)
-├── data/
-│   ├── raw/
-│   │   ├── VSEC.jsonl                # VSEC Corpus thô (25.1 MB, 9341 câu)
-│   │   └── raw_corpus.txt            # Câu sạch trích từ VSEC
-│   ├── processed/
-│   │   ├── train.jsonl               # 7.472 cặp (input_lỗi, target_chuẩn)
-│   │   ├── val.jsonl                 # 934 cặp
-│   │   ├── test.jsonl                # 935 cặp
-│   │   ├── lm_unigram.json           # Unigram LM
-│   │   └── lm_bigram.json            # Bigram LM (1.3 MB)
-│   └── README.md
-├── notebooks/
-│   ├── 01_quickstart_and_eda.ipynb   # EDA & demo sinh nhiễu
-│   └── train_colab.ipynb             # Notebook huấn luyện Google Colab (T4 GPU)
-├── checkpoints/
-│   └── vit5_spelling_corrector/
-│       └── best_model/               # Checkpoint ViT5 đã finetuned
-├── logs/
-│   ├── EVALUATION.md                 # Bảng so sánh kết quả các model
-│   └── eval_results.json             # Kết quả đánh giá dạng JSON
-├── src/
-│   ├── data/
-│   │   ├── prepare_vsec.py           # Tải & parse VSEC Corpus từ GitHub
-│   │   ├── preprocess.py             # Normalize Unicode NFC, dấu thanh
-│   │   ├── noise_synthesizer.py      # Sinh lỗi nhân tạo (6 chiến lược)
-│   │   └── dataset.py                # PyTorch Dataset & DataCollator Seq2Seq
-│   ├── models/
-│   │   └── spell_corrector.py        # ViT5 wrapper (load/save/correct)
-│   ├── training/
-│   │   ├── metrics.py                # EM, BLEU, CER, WER, Token Acc, Detection P/R/F1
-│   │   └── trainer.py                # HuggingFace Seq2SeqTrainer wrapper
-│   ├── utils/
-│   │   ├── helpers.py                # load_config, set_seed, get_device
-│   │   └── logger.py                 # Logging chuẩn
-│   ├── smart_corrector.py            # Rule engine N-gram (không cần GPU)
-│   └── inference.py                  # Pipeline inference + phát hiện vị trí lỗi
-├── generate_noise_data.py            # Sinh dữ liệu huấn luyện từ văn bản sạch
-├── train.py                          # Huấn luyện / finetuning ViT5
-├── evaluate.py                       # Đánh giá toàn diện (8 chỉ số định lượng)
-├── predict.py                        # Dự đoán CLI tương tác
-├── app.py                            # HTTP server + HTML/CSS/JS UI (port 7860, 4 tab)
-└── requirements.txt
+```sh
+python -X utf8 predict.py --text "Hôm nai tôi đến chường để học lập chình."
+python -X utf8 -m pytest -q
 ```
 
----
+Gợi ý của hệ thống có thể sai. Giao diện giữ bản gốc và đánh dấu vị trí gợi ý để người dùng xem trước. Sửa tự động áp dụng gợi ý qua ngưỡng chênh lệch điểm ngữ cảnh. Sửa tất cả áp dụng danh sách đã duyệt, trừ các mục được bỏ qua. Vị trí API dùng chỉ số ký tự Unicode từ 0, điểm kết thúc loại trừ. Hệ thống giữ xuống dòng, dấu câu và các đoạn được nhận diện là URL, email, tên riêng hoặc thuật ngữ. Nhận diện tên riêng dựa trên mẫu viết hoa và danh sách thuật ngữ.
 
-## 🚀 Hướng Dẫn Cài Đặt & Sử Dụng
+## Dữ liệu và đánh giá
 
-### 1. Môi trường ảo & cài thư viện
+Manifest VSEC lưu 7.472 câu train, 934 câu validation và 935 câu test cùng SHA-256 và ID. Pipeline nhóm câu có cùng văn bản nguồn, đầu vào hoặc đáp án đã chuẩn hóa trước khi chia. Dữ liệu nhiễu, cặp câu sạch và thống kê N-gram học từ train. Test được dùng để đo cuối cùng. Xem [quy trình dữ liệu](data/README.md).
 
-```bash
-python -m venv venv
-.\venv\Scripts\Activate.ps1          # Windows PowerShell
-# source venv/bin/activate           # Linux/macOS
-
-pip install -r requirements.txt
+```sh
+python -X utf8 evaluate.py --model baseline --split val
+python -X utf8 evaluate.py --model baseline --split practice
+python -X utf8 evaluate.py --model baseline --split test --stress
 ```
 
-### 2. Tải & chuẩn bị VSEC Corpus
+Kết quả được ghi vào `experiments/results/<split>/` và hiển thị trên website. Detection chấm vị trí. Correction yêu cầu đồng thời đúng vị trí và đúng nội dung sửa. Báo cáo cũng có Exact Match, Token Accuracy, BLEU-4, CER, WER và tỷ lệ can thiệp vào câu chuẩn đối chứng. Tập `practice` gồm các ví dụ soạn tay để kiểm tra hành vi. Đánh giá trên dữ liệu VSEC dùng các bản ghi thực tế của corpus.
 
-```bash
-# Tải VSEC Corpus (~25 MB) và chia train/val/test
-python src/data/prepare_vsec.py
+## ViT5 và ByT5
+
+ViT5 là mô hình Transformer encoder–decoder dùng token con. ByT5 mã hóa byte UTF-8. Cả hai học chuỗi đầu vào có tiền tố `spelling: ` và chuỗi mục tiêu sạch. Vòng huấn luyện dùng cross-entropy, AdamW, dynamic padding, chọn checkpoint theo validation loss và early stopping. Các cặp vượt giới hạn token được báo theo ID.
+
+```sh
+python -X utf8 train.py --output experiments/exp04 --epochs 3 --noise-size 5000 --identities
+python -X utf8 select_checkpoint.py --model vit5 --checkpoints experiments/exp04/best_model
+python -X utf8 evaluate.py --model vit5
 ```
 
-### 3. Sinh dữ liệu nhiễu nhân tạo (Data Augmentation)
+`select_checkpoint.py` chọn beam và ngưỡng log-xác suất trên validation, đồng thời tính mức sửa quá tay trên câu chuẩn. Chạy trên GPU với notebook [Colab](notebooks/train_colab.ipynb) hoặc dùng [ma trận thí nghiệm](experiments/README.md). Trọng số cũ từng dùng phân chia có rò rỉ. Quy trình triển khai yêu cầu metadata của phân chia hiện tại. Một lần chạy smoke xác minh huấn luyện, lưu và nạp lại trọng số ViT5. Chỉ số của smoke và checkpoint cũ được loại khỏi báo cáo thực nghiệm trên web.
 
-```bash
-python generate_noise_data.py --noise_prob 0.3
-```
+## Nguồn
 
-Script sinh 6 loại nhiễu: Telex, phương ngữ, dấu hỏi/ngã, rụng dấu, QWERTY, lỗi cơ học.
-
-### 4. Huấn luyện mô hình ViT5 (Training / Finetuning)
-
-```bash
-# Cấu hình mặc định trong configs/config.yaml khớp với checkpoint hiện tại
-python train.py
-
-# Hoặc ghi đè tham số khi cần
-python train.py --epochs 1 --batch_size 16 --lr 2e-4
-```
-
-Checkpoint tốt nhất được lưu tại: `checkpoints/vit5_spelling_corrector/best_model/`
-
-Trên Google Colab (T4 GPU): mở `notebooks/train_colab.ipynb`.
-
-> ⚠️ **Lưu ý về split của notebook**: notebook trộn 2.000 câu sạch với 7.472 câu VSEC
-> *trước khi* chia train/val/test, nên 743/935 câu test trùng id với tập train. Khi báo cáo
-> kết quả, chỉ dùng 192 câu test "unseen" làm con số công bằng. Script `generate_noise_data.py`
-> đã được sửa để chia câu sạch trước khi sinh nhiễu và mặc định ghi vào `data/synthetic`,
-> không ghi đè `data/processed`.
-
-### 5. Đánh giá mô hình (Evaluation — 8 chỉ số định lượng)
-
-```bash
-# Đánh giá model đã finetuned
-python evaluate.py --model_path checkpoints/vit5_spelling_corrector/best_model
-
-# Đánh giá với tên định danh tùy chọn (ghi vào bảng so sánh)
-python evaluate.py \
-    --model_path checkpoints/vit5_spelling_corrector/best_model \
-    --run_name "vit5_finetuned_ep5" \
-    --num_examples 10
-```
-
-**Các chỉ số được tính:**
-
-| Chỉ số | Loại | Mô tả |
-|---|---|---|
-| **Exact Match (EM)** | Correction | % câu dự đoán hoàn toàn chính xác |
-| **Token Accuracy** | Correction | % từ được dự đoán đúng (cấp âm tiết) |
-| **BLEU-4** | Correction | Điểm BLEU-4 (sacrebleu, 0–100) |
-| **CER** | Correction | Character Error Rate (↓ tốt hơn) |
-| **WER** | Correction | Word Error Rate (↓ tốt hơn) |
-| **Precision** | Detection | Tỷ lệ sửa đúng / tổng vị trí đã sửa |
-| **Recall** | Detection | Tỷ lệ phát hiện đúng / tổng lỗi thực |
-| **F1-score** | Detection | Trung bình điều hòa Precision & Recall |
-
-### 6. Giao diện Web (HTTP server + HTML/CSS/JS)
-
-```bash
-python app.py
-# Mở trình duyệt tại http://localhost:7860
-```
-
-- **Tab 1**: Trình sửa lỗi AI — nhập câu, chạy ViT5, xem diff và chọn từng gợi ý sửa.
-- **Tab 2**: Đối sánh ViT5 vs Rule Engine trên cùng một câu.
-- **Tab 3**: Bộ sinh lỗi nhân tạo (Telex, phương ngữ, dấu hỏi/ngã, QWERTY…).
-- **Tab 4**: Báo cáo thực nghiệm — metrics 192 câu unseen, đồ thị train loss và cấu hình huấn luyện.
-
-### 7. Dự đoán qua dòng lệnh
-
-```bash
-# Sửa một câu
-python predict.py --text "Hôm nai chời mưa to qúa, tôi quến mang ô."
-
-# Chế độ tương tác
-python predict.py
-```
-
----
-
-## 📊 Kết Quả Thực Nghiệm
-
-Xem bảng so sánh đầy đủ tại [`logs/EVALUATION.md`](logs/EVALUATION.md) và số liệu gốc tại
-[`logs/eval_results.json`](logs/eval_results.json).
-
-### Kết quả chính — 192 câu test "unseen" (không nằm trong tập huấn luyện)
-
-| Model | #Câu | EM (%) | BLEU | Token Acc (%) | CER (%) | WER (%) | Det-P (%) | Det-R (%) | F1 (%) |
-|---|---|---|---|---|---|---|---|---|---|
-| **ViT5 Finetuned** | 192 | **58.33** | **96.02** | **95.05** | **1.53** | **2.43** | **55.50** | **78.83** | **65.14** |
-| Rule Baseline (N-gram + Levenshtein) | 192 | 6.77 | 85.72 | 92.27 | 1.97 | 6.47 | 28.40 | 23.78 | 25.89 |
-
-### Kết quả tham chiếu — toàn bộ 935 câu test
-
-> ⚠️ 743/935 câu trùng id với tập train của notebook (rò rỉ dữ liệu). Chỉ dùng để tham chiếu,
-> **không** trích dẫn như kết quả sạch.
-
-| Model | #Câu | EM (%) | BLEU | Token Acc (%) | CER (%) | WER (%) | Det-P (%) | Det-R (%) | F1 (%) |
-|---|---|---|---|---|---|---|---|---|---|
-| ViT5 Finetuned | 935 | 73.48 | 97.21 | 95.59 | 1.25 | 1.79 | 62.20 | 89.26 | 73.31 |
-| Rule Baseline | 935 | 6.84 | 85.83 | 91.42 | 2.03 | 6.49 | 28.92 | 20.65 | 24.10 |
-
-**Phân tích lỗi trên 192 câu unseen (ViT5):** 80/192 câu còn sai (41.67%); 109 thay thế,
-29 xóa, 3 chèn token; 14 câu bị đổi độ dài; 194 vị trí bị sửa quá tay (over-correction).
-
-> Chạy `python evaluate.py` để đánh giá lại và cập nhật `logs/`. WER đã được sửa để tính
-> đúng ở cấp token (trước đây tính nhầm trên chuỗi ký tự đã nối).
-
----
-
-## ⚙️ Cấu Hình (`configs/config.yaml`)
-
-| Tham số | Giá trị | Mô tả |
-|---|---|---|
-| `model.name_or_path` | `VietAI/vit5-base` | Pretrained backbone |
-| `model.max_source_length` | 96 | Độ dài tối đa input (khớp checkpoint) |
-| `model.max_target_length` | 96 | Độ dài tối đa output (khớp checkpoint) |
-| `training.learning_rate` | 2e-4 | AdamW learning rate |
-| `training.num_train_epochs` | 1 | Số epoch huấn luyện |
-| `training.per_device_train_batch_size` | 16 | Batch size |
-| `training.gradient_accumulation_steps` | 2 | Batch hiệu dụng = 32 |
-| `training.warmup_ratio` | 0.1 | Warmup ratio |
-| `training.metric_for_best_model` | `loss` | Chọn checkpoint theo eval loss |
-| `training.fp16` | false | Mixed precision (true khi có GPU) |
-| `generation.num_beams` | 4 | Beam Search width |
-
----
-
-## 📚 Tài Liệu Tham Khảo
-
-- **VSEC Corpus**: [github.com/VSEC2021/VSEC](https://github.com/VSEC2021/VSEC) — 9.341 câu, 11.202 lỗi thực tế
-- **ViT5**: [VietAI/vit5-base](https://huggingface.co/VietAI/vit5-base) — T5 pretrained tiếng Việt
-- **PhoBERT**: [vinai/phobert-base-v2](https://huggingface.co/vinai/phobert-base-v2) — BERT tiếng Việt
-- Raffel et al. (2020) — *Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer*
+- [Tatoeba, bản tải ngữ liệu tiếng Việt](https://tatoeba.org/en/downloads)
+- [VSEC Corpus](https://github.com/VSEC2021/VSEC)
+- [VSEC Paper](https://arxiv.org/abs/2111.00640)
+- [ViT5 Paper](https://aclanthology.org/2022.naacl-srw.18/)
+- [VietAI/vit5-base](https://huggingface.co/VietAI/vit5-base)
+- [ByT5 Paper](https://arxiv.org/abs/2105.13626)

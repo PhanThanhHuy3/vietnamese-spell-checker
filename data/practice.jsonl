@@ -1,0 +1,35 @@
+{"id":"practice_01","input_text":"Hôm nai tôi đến chường để học lập chình.","target_text":"Hôm nay tôi đến trường để học lập trình."}
+{"id":"practice_02","input_text":"Tôi đang sữa bài và suy nghỉ về cách giải khác.","target_text":"Tôi đang sửa bài và suy nghĩ về cách giải khác."}
+{"id":"practice_03","input_text":"Tooi đang hoc Python tại Đà Nẵng. Liên hệ demo@example.org.","target_text":"Tôi đang học Python tại Đà Nẵng. Liên hệ demo@example.org."}
+{"id":"practice_04","input_text":"Chươg trình họcc tập của tuần tới đã được cập nhật.","target_text":"Chương trình học tập của tuần tới đã được cập nhật."}
+{"id":"practice_05","input_text":"Tôi đang học Python tại Đà Nẵng. Xem https://example.org/a.","target_text":"Tôi đang học Python tại Đà Nẵng. Xem https://example.org/a."}
+{"id":"practice_06","input_text":"Tôi rất, rất vui khi gặp lại bạn.","target_text":"Tôi rất, rất vui khi gặp lại bạn."}
+{"id": "practice_07", "input_text": "toi khong muon di an dau", "target_text": "tôi không muốn đi ăn đâu"}
+{"id": "practice_08", "input_text": "Tôi dang học bai", "target_text": "Tôi đang học bài"}
+{"id": "practice_09", "input_text": "Tôi đang suy nghỉ", "target_text": "Tôi đang suy nghĩ"}
+{"id": "practice_10", "input_text": "Tôi đi đến chường", "target_text": "Tôi đi đến trường"}
+{"id": "practice_11", "input_text": "Học xinh đi học", "target_text": "Học sinh đi học"}
+{"id": "practice_12", "input_text": "Cô dáo đang dạy học", "target_text": "Cô giáo đang dạy học"}
+{"id": "practice_13", "input_text": "Công ngiệp", "target_text": "Công nghiệp"}
+{"id": "practice_14", "input_text": "Họcc sinh", "target_text": "Học sinh"}
+{"id": "practice_15", "input_text": "Chươg trình", "target_text": "Chương trình"}
+{"id": "practice_16", "input_text": "Tooi đang học", "target_text": "Tôi đang học"}
+{"id": "practice_17", "input_text": "Tôi đang sữa bài tập", "target_text": "Tôi đang sửa bài tập"}
+{"id": "practice_18", "input_text": "Tôi đang học bài", "target_text": "Tôi đang học bài"}
+{"id": "practice_19", "input_text": "Tôi sống ở Gia Lai", "target_text": "Tôi sống ở Gia Lai"}
+{"id": "practice_20", "input_text": "Tôi đang học Python", "target_text": "Tôi đang học Python"}
+{"id": "practice_21", "input_text": "toi đang hoc lập chình", "target_text": "tôi đang học lập trình"}
+{"id": "practice_22", "input_text": "Bạn dang làm gì?", "target_text": "Bạn đang làm gì?"}
+{"id": "practice_23", "input_text": "Tôi đang hoc. Bạn thì sao?", "target_text": "Tôi đang học. Bạn thì sao?"}
+{"id": "practice_24", "input_text": "Tôi có 10 quyển sách", "target_text": "Tôi có 10 quyển sách"}
+{"id": "practice_25", "input_text": "Email: abc@example.com", "target_text": "Email: abc@example.com"}
+{"id": "practice_26", "input_text": "https://example.com", "target_text": "https://example.com"}
+{"id": "practice_27", "input_text": "Rất rất vui", "target_text": "Rất rất vui"}
+{"id": "practice_28", "input_text": "Tôi rất vui 😊", "target_text": "Tôi rất vui 😊"}
+{"id": "practice_29", "input_text": "toi bi dau bung", "target_text": "tôi bị đau bụng"}
+{"id": "practice_30", "input_text": "toi mua dau an", "target_text": "tôi mua dầu ăn"}
+{"id": "practice_31", "input_text": "danh dau van ban", "target_text": "đánh dấu văn bản"}
+{"id": "practice_32", "input_text": "toi khong di dau", "target_text": "tôi không đi đâu"}
+{"id": "practice_33", "input_text": "toi muon uong nuoc", "target_text": "tôi muốn uống nước"}
+{"id": "practice_34", "input_text": "an toan la tren het", "target_text": "an toàn là trên hết"}
+{"id": "practice_35", "input_text": "hom nay troi dep", "target_text": "hôm nay trời đẹp"}

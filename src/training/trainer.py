@@ -1,96 +1,35 @@
-from pathlib import Path
-from typing import Any, Dict
+"""Shared AdamW fine-tuning loop with validation checkpoint selection."""
+import torch
+from transformers import EarlyStoppingCallback, Seq2SeqTrainer, Seq2SeqTrainingArguments
 
-from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
-
-from ..data.dataset import SpellingDataset, build_data_collator
-from ..models.spell_corrector import VietnameseSpellCorrector
-from .metrics import build_compute_metrics_fn
+from src.data.dataset import build_data_collator
 
 
 class SpellingTrainer:
-    """Class điều phối quá trình huấn luyện mô hình sửa lỗi chính tả Seq2Seq."""
-
-    def __init__(
-        self,
-        model_wrapper: VietnameseSpellCorrector,
-        train_dataset: SpellingDataset,
-        eval_dataset: SpellingDataset | None = None,
-        config: Dict[str, Any] | None = None,
-    ):
-        self.model_wrapper = model_wrapper
-        self.train_dataset = train_dataset
-        self.eval_dataset = eval_dataset
-        self.config = config or {}
-
-        training_cfg = self.config.get("training", {})
-        output_dir = training_cfg.get("output_dir", "checkpoints/vit5_spelling_corrector")
-
-        # Cấu hình tham số huấn luyện tương thích cả transformers cũ và mới
-        import inspect
-        sig = inspect.signature(Seq2SeqTrainingArguments.__init__)
-
-        args_dict = {
-            "output_dir": output_dir,
-            "learning_rate": float(training_cfg.get("learning_rate", 5e-5)),
-            "weight_decay": float(training_cfg.get("weight_decay", 0.01)),
-            "num_train_epochs": int(training_cfg.get("num_train_epochs", 5)),
-            "per_device_train_batch_size": int(training_cfg.get("per_device_train_batch_size", 16)),
-            "per_device_eval_batch_size": int(training_cfg.get("per_device_eval_batch_size", 16)),
-            "gradient_accumulation_steps": int(training_cfg.get("gradient_accumulation_steps", 1)),
-            "fp16": bool(training_cfg.get("fp16", False)),
-            "logging_steps": int(training_cfg.get("logging_steps", 10)),
-            "eval_strategy": training_cfg.get("eval_strategy", "epoch"),
-            "save_strategy": training_cfg.get("save_strategy", "epoch"),
-            "save_total_limit": int(training_cfg.get("save_total_limit", 2)),
-            "load_best_model_at_end": bool(training_cfg.get("load_best_model_at_end", True)),
-            "metric_for_best_model": training_cfg.get("metric_for_best_model", "exact_match"),
-            "greater_is_better": bool(training_cfg.get("greater_is_better", True)),
-            "predict_with_generate": True,
-            "generation_max_length": self.config.get("model", {}).get("max_target_length", 128),
-            "report_to": "none",
-        }
-
-        # Nếu dùng steps thay vì epoch
-        if args_dict["eval_strategy"] == "steps":
-            args_dict["eval_steps"] = int(training_cfg.get("eval_steps", 50))
-            args_dict["save_steps"] = int(training_cfg.get("save_steps", 50))
-
-        # Tương thích warmup_ratio vs warmup_steps
-        if "warmup_ratio" in sig.parameters:
-            args_dict["warmup_ratio"] = float(training_cfg.get("warmup_ratio", 0.1))
-        elif "warmup_steps" in sig.parameters:
-            args_dict["warmup_steps"] = int(training_cfg.get("warmup_steps", 10))
-
-        self.training_args = Seq2SeqTrainingArguments(**args_dict)
-
-        # Chuẩn bị Collator và Metrics Callback
-        self.data_collator = build_data_collator(
-            tokenizer=self.model_wrapper.tokenizer,
-            model=self.model_wrapper.model,
+    def __init__(self, wrapper, train, val, config, smoke_steps=None):
+        settings = config["training"]
+        args = Seq2SeqTrainingArguments(
+            output_dir=settings["output_dir"],
+            eval_strategy="epoch", save_strategy="epoch",
+            load_best_model_at_end=True, metric_for_best_model="eval_loss",
+            greater_is_better=False, save_total_limit=2, save_only_model=True,
+            optim="adamw_torch", learning_rate=float(settings["learning_rate"]),
+            weight_decay=settings["weight_decay"], warmup_ratio=settings["warmup_ratio"],
+            num_train_epochs=settings["num_train_epochs"],
+            per_device_train_batch_size=settings["per_device_train_batch_size"],
+            per_device_eval_batch_size=settings["per_device_eval_batch_size"],
+            gradient_accumulation_steps=settings["gradient_accumulation_steps"],
+            bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+            fp16=torch.cuda.is_available() and not torch.cuda.is_bf16_supported(),
+            seed=config["seed"], logging_steps=5, logging_first_step=True, report_to="none",
+            max_steps=smoke_steps or -1, prediction_loss_only=True,
+            dataloader_pin_memory=torch.cuda.is_available(),
         )
-        self.compute_metrics_fn = build_compute_metrics_fn(self.model_wrapper.tokenizer)
-
-        # Khởi tạo HF Seq2SeqTrainer
-        self.hf_trainer = Seq2SeqTrainer(
-            model=self.model_wrapper.model,
-            args=self.training_args,
-            train_dataset=self.train_dataset,
-            eval_dataset=self.eval_dataset,
-            data_collator=self.data_collator,
-            compute_metrics=self.compute_metrics_fn,
+        self.runner = Seq2SeqTrainer(
+            model=wrapper.model, args=args, train_dataset=train, eval_dataset=val,
+            data_collator=build_data_collator(wrapper.tokenizer, wrapper.model),
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=settings["patience"])],
         )
 
-    def train(self) -> Any:
-        """Thực thi vòng lặp huấn luyện."""
-        train_result = self.hf_trainer.train()
-
-        # Lưu model tốt nhất
-        best_model_dir = Path(self.training_args.output_dir) / "best_model"
-        self.model_wrapper.save_pretrained(best_model_dir)
-
-        return train_result
-
-    def evaluate(self) -> Dict[str, float]:
-        """Đánh giá mô hình trên tập validation/test."""
-        return self.hf_trainer.evaluate()
+    def train(self):
+        return self.runner.train()

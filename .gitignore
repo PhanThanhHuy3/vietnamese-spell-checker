@@ -72,3 +72,7 @@ huggingface/
 # Environment variables
 .env
 .env.local
+
+# Local experiment artifacts
+experiments/*
+!experiments/README.md
