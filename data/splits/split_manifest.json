@@ -1,12 +1,42 @@
 {
-  "version": 1,
+  "version": 2,
+  "near_grouped": [
+    [
+      "vsec_00064",
+      "vsec_01619"
+    ],
+    [
+      "vsec_01486",
+      "vsec_07714"
+    ],
+    [
+      "vsec_01959",
+      "vsec_06599"
+    ],
+    [
+      "vsec_02620",
+      "vsec_04404"
+    ],
+    [
+      "vsec_03728",
+      "vsec_08895"
+    ],
+    [
+      "vsec_04263",
+      "vsec_04489"
+    ],
+    [
+      "vsec_08603",
+      "vsec_09079"
+    ]
+  ],
   "seed": 42,
   "raw_sha256": "7034f103f7be6a9dddbae12222442926da74b1e3ab4634fcde85dc5e548afbc9",
   "duplicates": 0,
   "rejected_lines": [],
   "splits": {
     "train": {
-      "sha256": "cea0953d44ddff84f02d2ab0822c1b6ca5515d250dc936e1787f5aa2c3d154d4",
+      "sha256": "0c6daf921c9a61ecafc00731ab659882a1d52da2c5fcebf28bfca795885de540",
       "ids": [
         "vsec_06788",
         "vsec_07873",
@@ -7473,20 +7503,20 @@
         "vsec_02548",
         "vsec_06930",
         "vsec_04558",
-        "vsec_06879",
-        "vsec_09207",
-        "vsec_03812",
-        "vsec_00489",
-        "vsec_01425",
-        "vsec_02287",
-        "vsec_04507"
+        "vsec_04404",
+        "vsec_00064",
+        "vsec_09079",
+        "vsec_06599",
+        "vsec_03728",
+        "vsec_07714",
+        "vsec_04263"
       ],
       "samples": 7472,
-      "annotated_errors": 8990,
+      "annotated_errors": 8989,
       "clean_sentences": 0,
       "errors_per_sentence": {
-        "1": 6260,
-        "2": 996,
+        "1": 6261,
+        "2": 995,
         "3": 156,
         "4": 40,
         "5": 14,
@@ -7496,8 +7526,13 @@
       }
     },
     "val": {
-      "sha256": "deef1ad544b198e687b0d3ce4a751e7e71ebd8abd8720670c8457b82fd8e05f2",
+      "sha256": "4b94129dfb3a77a61ca8b068b37480f8e22aa75f8bab1b589132e6a7ba7bbb09",
       "ids": [
+        "vsec_03812",
+        "vsec_00489",
+        "vsec_01425",
+        "vsec_02287",
+        "vsec_04507",
         "vsec_02822",
         "vsec_04554",
         "vsec_05130",
@@ -7559,7 +7594,6 @@
         "vsec_06455",
         "vsec_07073",
         "vsec_01790",
-        "vsec_04404",
         "vsec_08840",
         "vsec_03061",
         "vsec_08421",
@@ -7990,7 +8024,6 @@
         "vsec_01886",
         "vsec_08932",
         "vsec_09311",
-        "vsec_00064",
         "vsec_02372",
         "vsec_08262",
         "vsec_09143",
@@ -8047,7 +8080,6 @@
         "vsec_00764",
         "vsec_00748",
         "vsec_07570",
-        "vsec_09079",
         "vsec_05450",
         "vsec_02561",
         "vsec_03408",
@@ -8174,7 +8206,6 @@
         "vsec_04103",
         "vsec_08988",
         "vsec_08099",
-        "vsec_06599",
         "vsec_02038",
         "vsec_05041",
         "vsec_09275",
@@ -8202,7 +8233,6 @@
         "vsec_04787",
         "vsec_04495",
         "vsec_04954",
-        "vsec_03728",
         "vsec_01648",
         "vsec_04531",
         "vsec_03139",
@@ -8445,8 +8475,10 @@
       }
     },
     "test": {
-      "sha256": "98ffd0675530e869c9acde273e44e867c6e7dba30d5485582cbbfb66fca2dda0",
+      "sha256": "8e28a13d9cc892dd72a1964ae91602b780ac67b6a2595a5144985adfa92bd25e",
       "ids": [
+        "vsec_06879",
+        "vsec_09207",
         "vsec_05502",
         "vsec_00385",
         "vsec_03500",
@@ -9192,11 +9224,9 @@
         "vsec_03267",
         "vsec_00660",
         "vsec_05736",
-        "vsec_07714",
         "vsec_06912",
         "vsec_05532",
         "vsec_03468",
-        "vsec_04263",
         "vsec_07573",
         "vsec_01376",
         "vsec_00442",
@@ -9384,11 +9414,11 @@
         "vsec_01825"
       ],
       "samples": 935,
-      "annotated_errors": 1105,
+      "annotated_errors": 1106,
       "clean_sentences": 0,
       "errors_per_sentence": {
-        "1": 797,
-        "2": 117,
+        "1": 796,
+        "2": 118,
         "3": 14,
         "4": 3,
         "5": 4

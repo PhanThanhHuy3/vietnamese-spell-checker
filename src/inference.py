@@ -7,6 +7,7 @@ from time import perf_counter
 
 from src.data.context_corpus import context_sentences
 from src.models.baseline import NgramBaseline
+from src.models.accent_restorer import END, START, term
 from src.postprocessing import WORD, apply_edits, document_chunks, word_suggestions, without_accents
 from src.data.validate_split import validate
 
@@ -68,8 +69,11 @@ class SpellInferencePipeline:
         return self.corrector.fits(text, self.source_limit, self.prefix)
 
     def scored_chunks(self, texts):
-        chunks = [(i, offset, chunk) for i, text in enumerate(texts)
-                  for offset, chunk in document_chunks(text, self.fits) if self.fits(chunk)]
+        spans = [(i, offset, chunk) for i, text in enumerate(texts)
+                 for offset, chunk in document_chunks(text, self.fits)]
+        chunks = [span for span in spans if self.fits(span[2])]
+        self.skipped_input_chunks = len(spans) - len(chunks)
+        self.scored_input_chunks = len(spans)
         predictions = []
         for start in range(0, len(chunks), 8):
             batch = chunks[start:start + 8]
@@ -90,7 +94,9 @@ class SpellInferencePipeline:
         return results
 
     def batch_edits(self, texts):
-        return self.filter_chunks(texts, self.scored_chunks(texts), self.threshold)
+        chunks = self.scored_chunks(texts)
+        self.incomplete_output_chunks = sum(score is None for _, _, _, _, score in chunks)
+        return self.filter_chunks(texts, chunks, self.threshold)
 
     def correct_many(self, texts):
         return [apply_edits(text, edits) for text, edits in zip(texts, self.batch_edits(texts), strict=True)]
@@ -154,7 +160,23 @@ class CorrectionService:
 
     def check_checkpoint(self, name):
         info = self.inventory(name)
-        if not info or name == "baseline" or info["state"] not in ("validated", "ready", "incompatible"):
+        if not info or name == "baseline":
+            return info
+        if info.get("legacy"):
+            from src.models.spell_corrector import VietnameseSpellCorrector
+            try:
+                with self.lock:
+                    wrapper = VietnameseSpellCorrector(str(self.root / LEGACY_VIT5), local_only=True)
+                    example = "ban la ai vay"
+                    output, score = wrapper.generate([example], 96, 96, 4)[0]
+                info["diagnostic"] = {"loaded": True, "input": example, "prediction": output,
+                                      "stopped_at_eos": score is not None,
+                                      "device": str(wrapper.device),
+                                      "status": "Chỉ đối chiếu khả năng nạp checkpoint cũ."}
+            except (OSError, ImportError, RuntimeError, ValueError) as exc:
+                info["diagnostic"] = {"loaded": False, "error": type(exc).__name__}
+            return info
+        if info["state"] not in ("validated", "ready", "incompatible"):
             return info
         path = self.paths[name]
         meta = self.deployment_metadata(name)
@@ -190,7 +212,7 @@ class CorrectionService:
 
     def model_edits(self, text, model):
         if model == "baseline":
-            return self.baseline.suggest(text)
+            return self.baseline.suggest(text), None
         if model not in self.paths:
             raise ValueError("Mô hình không hợp lệ")
         with self.lock:
@@ -198,7 +220,11 @@ class CorrectionService:
             try:
                 if model not in self.engines or self.engines[model][0] != meta:
                     self.engines[model] = (meta, SpellInferencePipeline(self.paths[model], meta))
-                return self.engines[model][1].batch_edits([text])[0]
+                engine = self.engines[model][1]
+                edits = engine.batch_edits([text])[0]
+                incomplete = engine.skipped_input_chunks + engine.incomplete_output_chunks
+                warning = f"{incomplete} đoạn vượt giới hạn mô hình và được giữ nguyên." if incomplete else None
+                return edits, warning
             except (OSError, ImportError, RuntimeError, ValueError) as exc:
                 logging.exception("Không chạy được mô hình %s", model)
                 raise ModelUnavailable(f"Không chạy được {MODEL_NAMES[model]} trên máy chủ.") from exc
@@ -210,7 +236,7 @@ class CorrectionService:
             model = self.recommendation()["model"]
         elif model in self.paths and not self.status()[model]["available"]:
             raise ModelUnavailable(self.inventory(model)["reason"])
-        edits = self.model_edits(text, model)
+        edits, warning = self.model_edits(text, model)
         edits = [edit for edit in edits if edit["original_segment"] != edit["corrected_segment"]]
         positions = {match.start(): i for i, match in enumerate(WORD.finditer(text), 1)}
         for index, edit in enumerate(edits, 1):
@@ -224,10 +250,33 @@ class CorrectionService:
         return {"original_text": text, "corrected_text": apply_edits(text, edits),
                 "auto_corrected_text": apply_edits(text, automatic), "total_syllables": len(positions),
                 "total_errors": len(edits), "errors_found": edits, "has_error": bool(edits),
-                "model": model, "requested_model": requested,
+                "model": model, "requested_model": requested, "warning": warning,
                 "latency_ms": round((perf_counter() - started) * 1000)}
 
-    def check(self, text, model="auto"):
+    def accent_options(self, text, original, suggestion, start, end):
+        language = self.baseline.language_model
+        key = without_accents(term(original))
+        if not key.isalpha() or without_accents(term(suggestion)) != key:
+            return []
+        left_parts = text[:start].rsplit(maxsplit=2)[-2:]
+        right_parts = text[end:].split(maxsplit=2)[:2]
+        left = [term(part) for part in WORD.findall(" ".join(left_parts))[-2:]]
+        right = [term(part) for part in WORD.findall(" ".join(right_parts))[:2]]
+        earlier, previous = ([START, START] + left)[-2:]
+        following, later = (right + [END, END])[:2]
+
+        def score(word):
+            return (language.transition(earlier, previous, word)
+                    + language.transition(previous, word, following)
+                    + language.transition(word, following, later))
+
+        options = [word for word in language.vocabulary.get(key, ())
+                   if language.unigrams[word] >= 4 and word not in (term(original), term(suggestion))]
+        options.sort(key=score, reverse=True)
+        return [word.upper() if original.isupper() else word.capitalize() if original[0].isupper() else word
+                for word in options[:5]]
+
+    def check(self, text, model="auto", assist=True):
         result = self.correct(text, model)
         errors = []
         for edit in result["errors_found"]:
@@ -235,7 +284,28 @@ class CorrectionService:
             kind = "missing_diacritics" if original.isascii() and without_accents(suggestion) == original else "spelling"
             if edit["category"] == "Tách hoặc ghép âm tiết":
                 kind = "word_boundary"
+            alternatives = (self.accent_options(text, original, suggestion, edit["start"], edit["end"])
+                            if assist and result["model"] != "baseline" else [])
+            auto_apply = edit["auto_apply"]
+            if assist and result["total_syllables"] == 1 and alternatives:
+                auto_apply = False
             errors.append({**edit, "id": f"error-{edit['id']}", "original": original, "suggestion": suggestion,
-                           "type": kind, "status": "pending"})
-        return {**result, "predicted_text": result["corrected_text"], "syllable_count": result["total_syllables"],
-                "suggestion_count": len(errors), "errors": errors}
+                           "alternatives": list(dict.fromkeys([*edit["alternatives"], *alternatives])),
+                           "auto_apply": auto_apply, "type": kind, "status": "pending"})
+        if assist and result["model"] != "baseline" and not result["warning"]:
+            occupied = {index for edit in errors for index in range(edit["start"], edit["end"])}
+            for edit in self.baseline.suggest(text, include_alternatives=True):
+                original, suggestion = edit["original_segment"], edit["corrected_segment"]
+                if (not original.isascii() or not original.isalpha() or
+                        without_accents(term(suggestion)) != term(original) or
+                        not edit["auto_apply"] or any(i in occupied for i in range(edit["start"], edit["end"]))):
+                    continue
+                errors.append({**edit, "id": f"assist-{edit['start']}", "original": original, "suggestion": suggestion,
+                               "auto_apply": False, "type": "missing_diacritics", "status": "pending",
+                               "source": "accent_support"})
+            errors.sort(key=lambda edit: edit["start"])
+        predicted = apply_edits(text, errors)
+        automatic = apply_edits(text, [edit for edit in errors if edit["auto_apply"]])
+        return {**result, "corrected_text": predicted, "auto_corrected_text": automatic, "predicted_text": predicted,
+                "total_errors": len(errors), "has_error": bool(errors), "errors_found": errors,
+                "syllable_count": result["total_syllables"], "suggestion_count": len(errors), "errors": errors}

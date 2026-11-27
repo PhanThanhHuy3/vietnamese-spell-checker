@@ -76,3 +76,11 @@ huggingface/
 # Local experiment artifacts
 experiments/*
 !experiments/README.md
+/training-exports/
+
+# Generated evaluation sets
+data/evaluation/*.jsonl
+
+# Local pretrained checkouts
+/vit5-base/
+/byt5-small/

@@ -2,6 +2,7 @@ seed: 42
 model:
   key: vit5
   name_or_path: VietAI/vit5-base
+  pretrained_dir: vit5-base
   max_source_length: 128
   max_target_length: 128
   prefix: 'spelling: '

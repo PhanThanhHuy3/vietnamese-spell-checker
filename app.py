@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl, urlsplit
 from src.data.noise_synthesizer import NOISE_LABELS, VietnameseNoiseSynthesizer
 from src.data.prepare_vsec import ROOT
 from src.inference import CorrectionService, ModelUnavailable
+from src.training.metrics import evaluate_edits
 from src.web_data import WebsiteData
 
 ASSETS = {
@@ -17,6 +18,8 @@ ASSETS = {
     "/app.js": ("app.js", "text/javascript"),
     "/research.js": ("research.js", "text/javascript"),
 }
+PAGE_ROUTES = {"/editor", "/guide", "/about", "/lab", "/lab/compare", "/lab/dataset",
+               "/lab/augmentation", "/lab/experiments", "/lab/models"}
 MAX_TEXT = 4000
 MAX_BODY = 32768
 
@@ -38,15 +41,18 @@ class SpellCheckerRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except ConnectionError:
+            pass
 
     def do_GET(self):
         url = urlsplit(self.path)
         path, query = url.path, dict(parse_qsl(url.query))
         service = self.server.service
         data = self.server.data
-        if path in ASSETS:
-            name, mime = ASSETS[path]
+        if path in ASSETS or path in PAGE_ROUTES:
+            name, mime = ASSETS.get(path, ASSETS["/"])
             self.respond(200, (ROOT / "web" / name).read_bytes(), mime)
             return
         try:
@@ -59,7 +65,7 @@ class SpellCheckerRequestHandler(BaseHTTPRequestHandler):
                 name = path.removeprefix("/api/models/")
                 result = service.check_checkpoint(name) if query.get("probe") == "1" else service.inventory(name)
             elif path in ("/api/dataset/stats", "/api/dataset"):
-                result = data.stats
+                result = {"token_histograms": data.token_histograms} if query.get("tokens") == "1" else data.stats
             elif path == "/api/dataset/samples":
                 result = data.samples(query)
             elif path == "/api/dataset/integrity":
@@ -118,6 +124,9 @@ class SpellCheckerRequestHandler(BaseHTTPRequestHandler):
 
     def compare(self, text, data):
         service = self.server.service
+        reference = data.get("reference")
+        if reference is not None:
+            reference = checked_text({"text": reference})
         models = service.status()
         requested = data.get("models", [name for name, info in models.items() if info["available"]])
         if not isinstance(requested, list) or not requested or any(type(name) is not str or name not in models for name in requested):
@@ -128,7 +137,10 @@ class SpellCheckerRequestHandler(BaseHTTPRequestHandler):
                 results[model] = {"error": models[model]["reason"]}
                 continue
             try:
-                results[model] = service.check(text, model)
+                results[model] = service.check(text, model, assist=False)
+                if reference is not None:
+                    metrics = evaluate_edits([results[model]["predicted_text"]], [text], [reference])
+                    results[model]["reference_metrics"] = {key: metrics[key] for key in ("detection", "correction")}
             except ModelUnavailable as exc:
                 results[model] = {"error": str(exc)}
         completed = sum("error" not in item for item in results.values())

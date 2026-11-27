@@ -3,12 +3,13 @@ import argparse
 import json
 from pathlib import Path
 
-from src.data.prepare_vsec import MANIFEST, PROCESSED, SPLITS, content_keys, file_hash, read_rows
+from src.data.near_duplicates import near_pairs
+from src.data.prepare_vsec import MANIFEST, PROCESSED, SPLITS, content_keys, file_hash, read_rows, text_key
 
 
 def validate(directory=PROCESSED, manifest_path=MANIFEST):
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest["version"] != 1:
+    if manifest["version"] != 2:
         raise ValueError("Phiên bản manifest VSEC không được hỗ trợ")
     all_ids, owners, splits = set(), {}, {}
     for name in SPLITS:
@@ -25,6 +26,10 @@ def validate(directory=PROCESSED, manifest_path=MANIFEST):
                 if owners.setdefault(key, name) != name:
                     raise ValueError(f"Nội dung rò rỉ giữa các tập: {row['id']}")
         splits[name] = rows
+    membership = {row["id"]: name for name, rows in splits.items() for row in rows}
+    for left, right in near_pairs((row for rows in splits.values() for row in rows), text_key):
+        if membership[left] != membership[right]:
+            raise ValueError(f"Cặp câu gần trùng giữa các tập: {left}, {right}")
     return splits, manifest
 
 

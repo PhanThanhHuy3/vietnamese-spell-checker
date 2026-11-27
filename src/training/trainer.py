@@ -1,8 +1,14 @@
 """Shared AdamW fine-tuning loop with validation checkpoint selection."""
 import torch
-from transformers import EarlyStoppingCallback, Seq2SeqTrainer, Seq2SeqTrainingArguments
+from transformers import EarlyStoppingCallback, Seq2SeqTrainer, Seq2SeqTrainingArguments, TrainerCallback
 
 from src.data.dataset import build_data_collator
+
+
+class RecoveryCheckpointCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % 25 == 0:
+            control.should_save = True
 
 
 class SpellingTrainer:
@@ -12,7 +18,8 @@ class SpellingTrainer:
             output_dir=settings["output_dir"],
             eval_strategy="epoch", save_strategy="epoch",
             load_best_model_at_end=True, metric_for_best_model="eval_loss",
-            greater_is_better=False, save_total_limit=2, save_only_model=True,
+            greater_is_better=False, save_total_limit=2, save_only_model=smoke_steps is not None,
+            restore_callback_states_from_checkpoint=True,
             optim="adamw_torch", learning_rate=float(settings["learning_rate"]),
             weight_decay=settings["weight_decay"], warmup_ratio=settings["warmup_ratio"],
             num_train_epochs=settings["num_train_epochs"],
@@ -25,11 +32,14 @@ class SpellingTrainer:
             max_steps=smoke_steps or -1, prediction_loss_only=True,
             dataloader_pin_memory=torch.cuda.is_available(),
         )
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=settings["patience"])]
+        if smoke_steps is None:
+            callbacks.append(RecoveryCheckpointCallback())
         self.runner = Seq2SeqTrainer(
             model=wrapper.model, args=args, train_dataset=train, eval_dataset=val,
             data_collator=build_data_collator(wrapper.tokenizer, wrapper.model),
-            callbacks=[EarlyStoppingCallback(early_stopping_patience=settings["patience"])],
+            callbacks=callbacks,
         )
 
-    def train(self):
-        return self.runner.train()
+    def train(self, resume_from_checkpoint=None):
+        return self.runner.train(resume_from_checkpoint=resume_from_checkpoint)

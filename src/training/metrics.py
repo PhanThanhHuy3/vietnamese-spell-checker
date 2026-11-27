@@ -88,9 +88,14 @@ def evaluate_edits(predictions, sources, references):
             clean_modified += bool(predicted)
         if prediction != reference:
             failures.append(dict(index=index, missed=len(gold.keys() - predicted.keys()),
-                                 overcorrected=len(predicted.keys() - gold.keys()), wrong_replacement=len(found) - fixed))
+                                 overcorrected=len(predicted.keys() - gold.keys()),
+                                 wrong_replacement=len(found) - fixed,
+                                 structural=sum((kind == "gap" or not replacement)
+                                                and gold.get((pos, kind)) != replacement
+                                                for (pos, kind), replacement in predicted.items())))
     return {"detection": rates(*detection), "correction": rates(*correction),
-            "overcorrection": {"false_edits": detection[1], "clean_samples": clean_samples,
+            "overcorrection": {"false_edits": detection[1],
+                               "false_edit_rate": detection[1] / max(detection[0] + detection[1], 1), "clean_samples": clean_samples,
                                "clean_modified": clean_modified,
                                "clean_modified_rate": clean_modified / max(clean_samples, 1)},
             "failures": failures}

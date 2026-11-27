@@ -1,57 +1,40 @@
 # VietSpell AI
 
-Phát hiện vị trí sai chính tả trong văn bản tiếng Việt và gợi ý âm tiết thay thế theo ngữ cảnh. Website cho phép xem văn bản gốc, áp dụng từng thay đổi, hoàn tác và sửa tất cả.
+Đồ án phát hiện vị trí sai chính tả tiếng Việt và đề xuất cách sửa theo ngữ cảnh. ViT5-base là Transformer chính, ByT5-small là mô hình đối chứng tùy chọn, N-gram + Levenshtein là baseline.
 
-## Chạy trên máy
-
-Từ thư mục dự án, chạy bằng Python 3.10 trở lên.
+## Chạy ứng dụng
 
 ```sh
 python -m pip install -r requirements.txt
 python -X utf8 -m src.data.prepare_vsec
 python -X utf8 -m src.data.validate_split
-python -X utf8 evaluate.py --model baseline
 python -X utf8 app.py
 ```
 
-Mở [VietSpell AI](http://127.0.0.1:7860/#check). Baseline N-gram + Levenshtein chạy trên CPU. Bộ khôi phục dấu tìm chuỗi âm tiết bằng beam search từ thống kê VSEC Train và ngữ liệu tiếng Việt Tatoeba. Hệ thống giữ phương án thay thế cho những âm tiết có nhiều cách thêm dấu. Trình kiểm tra chọn ViT5 khi có checkpoint triển khai đã xác minh. Có thể dùng cùng pipeline từ dòng lệnh.
+Mở [VietSpell Editor](http://127.0.0.1:7860/editor) để kiểm tra chính tả. Hệ thống chọn mô hình khả dụng đã được xác minh. Bấm từ gạch chân để xem gợi ý và áp dụng ngay trong văn bản. **Sửa tự động** trong menu Công cụ áp dụng các gợi ý đủ điều kiện. **Sửa tất cả** áp dụng các gợi ý còn chờ. Kết quả có thể sao chép hoặc xuất TXT.
+
+Mở [VietSpell AI Lab](http://127.0.0.1:7860/lab) để xem dữ liệu, so sánh mô hình, sinh lỗi, kiểm tra checkpoint và xem các báo cáo thực nghiệm.
+
+Frontend nhận vị trí ký tự Unicode dưới dạng khoảng `[start, end)`. Phần chỉnh sửa giữ dấu câu, xuống dòng, URL, email và các vùng được bảo vệ theo quy tắc trong bộ xử lý. Trang thông tin mô hình hiển thị tên mô hình thực sự chạy.
+
+## Checkpoint và dữ liệu
+
+VSEC có 9.341 câu và 11.202 lỗi gán nhãn. Manifest lưu ID, SHA-256 và các cặp gần trùng đã được gom trong cùng tập. Website có thể đọc annotation gốc đã xác minh, hiển thị token ViT5, kiểm tra trùng lặp và xuất số liệu. N-gram dùng VSEC Train. Ngữ liệu tiếng Việt bổ sung dùng cho xếp hạng ngữ cảnh được lọc theo khóa nội dung của VSEC và các bộ câu thử. [VSEC Corpus](https://github.com/VSEC2021/VSEC)
+
+Checkpoint cũ ở `checkpoints/vit5_spelling_corrector/best_model` có trọng số, config và tokenizer. Trang mô hình cho phép kiểm tra nạp riêng. Checkpoint triển khai mới cần metadata chứng minh phân chia hiện tại, kết quả chọn cấu hình trên Validation và một lượt inference thử thành công.
+
+## Huấn luyện và đánh giá
+
+Nếu có thư mục ViT5 pretrained cục bộ ở `vit5-base/`, cấu hình ViT5 kiểm tra SHA-256 của trọng số và mô hình SentencePiece trước khi nạp ngoại tuyến. Mục xem tokenization của VSEC cũng ưu tiên tokenizer cục bộ. Khi thư mục này vắng mặt, quy trình huấn luyện dùng định danh `VietAI/vit5-base`. Checkpoint sửa chính tả dùng phân chia hiện tại vẫn được xác minh riêng.
 
 ```sh
-python -X utf8 predict.py --text "Hôm nai tôi đến chường để học lập chình."
+python -X utf8 run_experiments.py exp00 exp01
+python -X utf8 run_experiments.py exp02 exp03 exp04
+python -X utf8 run_experiments.py exp06 --candidate experiments/exp02/best_model experiments/exp03/best_model experiments/exp04/best_model
+python -X utf8 evaluate.py --model vit5 --split test --stress --run_name vit5_final
 python -X utf8 -m pytest -q
 ```
 
-Gợi ý của hệ thống có thể sai. Giao diện giữ bản gốc và đánh dấu vị trí gợi ý để người dùng xem trước. Sửa tự động áp dụng gợi ý qua ngưỡng chênh lệch điểm ngữ cảnh. Sửa tất cả áp dụng danh sách đã duyệt, trừ các mục được bỏ qua. Vị trí API dùng chỉ số ký tự Unicode từ 0, điểm kết thúc loại trừ. Hệ thống giữ xuống dòng, dấu câu và các đoạn được nhận diện là URL, email, tên riêng hoặc thuật ngữ. Nhận diện tên riêng dựa trên mẫu viết hoa và danh sách thuật ngữ.
+Fine-tuning dùng PyTorch, Cross-Entropy và AdamW. Validation loss dùng để giữ checkpoint ứng viên trong từng lần chạy. Bước triển khai chọn theo Validation Correction F1 và dùng tỷ lệ sửa câu sạch để phân xử khi bằng điểm. Thực nghiệm cuối dùng VSEC Test. Clean Sentence Test là tập riêng từ câu chuẩn của VSEC Test sau kiểm tra trùng với Train. Các biến thể mất dấu và lỗi hỗn hợp dùng chung nguồn VSEC Test với seed 42. Chi tiết ở [ma trận thực nghiệm](experiments/README.md) và [notebook Colab](notebooks/train_colab.ipynb).
 
-## Dữ liệu và đánh giá
-
-Manifest VSEC lưu 7.472 câu train, 934 câu validation và 935 câu test cùng SHA-256 và ID. Pipeline nhóm câu có cùng văn bản nguồn, đầu vào hoặc đáp án đã chuẩn hóa trước khi chia. Dữ liệu nhiễu, cặp câu sạch và thống kê N-gram học từ train. Test được dùng để đo cuối cùng. Xem [quy trình dữ liệu](data/README.md).
-
-```sh
-python -X utf8 evaluate.py --model baseline --split val
-python -X utf8 evaluate.py --model baseline --split practice
-python -X utf8 evaluate.py --model baseline --split test --stress
-```
-
-Kết quả được ghi vào `experiments/results/<split>/` và hiển thị trên website. Detection chấm vị trí. Correction yêu cầu đồng thời đúng vị trí và đúng nội dung sửa. Báo cáo cũng có Exact Match, Token Accuracy, BLEU-4, CER, WER và tỷ lệ can thiệp vào câu chuẩn đối chứng. Tập `practice` gồm các ví dụ soạn tay để kiểm tra hành vi. Đánh giá trên dữ liệu VSEC dùng các bản ghi thực tế của corpus.
-
-## ViT5 và ByT5
-
-ViT5 là mô hình Transformer encoder–decoder dùng token con. ByT5 mã hóa byte UTF-8. Cả hai học chuỗi đầu vào có tiền tố `spelling: ` và chuỗi mục tiêu sạch. Vòng huấn luyện dùng cross-entropy, AdamW, dynamic padding, chọn checkpoint theo validation loss và early stopping. Các cặp vượt giới hạn token được báo theo ID.
-
-```sh
-python -X utf8 train.py --output experiments/exp04 --epochs 3 --noise-size 5000 --identities
-python -X utf8 select_checkpoint.py --model vit5 --checkpoints experiments/exp04/best_model
-python -X utf8 evaluate.py --model vit5
-```
-
-`select_checkpoint.py` chọn beam và ngưỡng log-xác suất trên validation, đồng thời tính mức sửa quá tay trên câu chuẩn. Chạy trên GPU với notebook [Colab](notebooks/train_colab.ipynb) hoặc dùng [ma trận thí nghiệm](experiments/README.md). Trọng số cũ từng dùng phân chia có rò rỉ. Quy trình triển khai yêu cầu metadata của phân chia hiện tại. Một lần chạy smoke xác minh huấn luyện, lưu và nạp lại trọng số ViT5. Chỉ số của smoke và checkpoint cũ được loại khỏi báo cáo thực nghiệm trên web.
-
-## Nguồn
-
-- [Tatoeba, bản tải ngữ liệu tiếng Việt](https://tatoeba.org/en/downloads)
-- [VSEC Corpus](https://github.com/VSEC2021/VSEC)
-- [VSEC Paper](https://arxiv.org/abs/2111.00640)
-- [ViT5 Paper](https://aclanthology.org/2022.naacl-srw.18/)
-- [VietAI/vit5-base](https://huggingface.co/VietAI/vit5-base)
-- [ByT5 Paper](https://arxiv.org/abs/2105.13626)
+Website đọc kết quả đã lưu. Kết quả Deep Learning có thêm dự đoán trước hậu xử lý. Số liệu của checkpoint cũ hoặc các lượt smoke không xuất hiện trong bảng kết quả chính thức.

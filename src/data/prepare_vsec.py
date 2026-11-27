@@ -7,6 +7,7 @@ from pathlib import Path
 import random
 from urllib.request import urlretrieve
 
+from src.data.near_duplicates import group_near_splits
 from src.data.preprocess import normalize_vietnamese_text as normalize
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -129,7 +130,8 @@ def prepare(raw=RAW, output=PROCESSED, manifest_path=MANIFEST, seed=42):
             SPLITS, key=lambda name: goals[name] - len(allocation[name])
         )
         allocation[chosen].extend(group)
-    manifest = dict(version=1, seed=seed, raw_sha256=file_hash(raw), duplicates=duplicates,
+    allocation, near_grouped = group_near_splits(allocation, groups, text_key)
+    manifest = dict(version=2, near_grouped=near_grouped, seed=seed, raw_sha256=file_hash(raw), duplicates=duplicates,
                     rejected_lines=rejected, splits={})
     for name, split in allocation.items():
         path = output / f"{name}.jsonl"

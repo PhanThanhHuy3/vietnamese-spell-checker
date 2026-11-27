@@ -39,7 +39,7 @@ def find_best(paths, manifest, validation, model, beams_options):
                 entry = dict(training_id=meta["training_id"], beams=beams, min_log_probability=threshold,
                              correction=correction, clean_modified_rate=clean_rate, objective=objective)
                 table.append(entry)
-                ranking = (objective, -clean_rate, -beams)
+                ranking = (correction["f1"], -clean_rate, objective, -beams)
                 if best is None or ranking > best[0]:
                     best = ranking, path, meta, entry
         del wrapper

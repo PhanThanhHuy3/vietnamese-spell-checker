@@ -1,13 +1,13 @@
 """Read-only dataset exploration and reproducible experiment artifact access."""
-from collections import Counter, defaultdict
+from collections import Counter
 from functools import cached_property
 from itertools import combinations
 import json
+from pathlib import Path
 import random
 import re
 
-from rapidfuzz.distance import Levenshtein
-
+from src.data.near_duplicates import near_pairs
 from src.data.prepare_vsec import content_keys, file_hash, read_rows, text_key
 from src.data.preprocess import normalize_vietnamese_text
 from src.data.validate_split import validate
@@ -65,6 +65,22 @@ class WebsiteData:
         return result
 
     @cached_property
+    def token_histograms(self):
+        try:
+            tokenizer = self.demo_tokenizer
+        except (OSError, ImportError, ValueError):
+            return {}
+        result = {}
+        for name, rows in self.service.splits.items():
+            lengths = Counter()
+            for at in range(0, len(rows), 256):
+                texts = ["spelling: " + row["input_text"] for row in rows[at:at + 256]]
+                encoded = tokenizer(texts, truncation=False, verbose=False)["input_ids"]
+                lengths.update(map(len, encoded))
+            result[name] = dict(sorted(lengths.items()))
+        return result
+
+    @cached_property
     def stats(self):
         manifest = self.service.manifest
         splits = {}
@@ -76,7 +92,8 @@ class WebsiteData:
             syllables = sum(length * count for length, count in lengths.items())
             splits[name] = {**{k: v for k, v in manifest["splits"][name].items() if k != "ids"},
                             "syllables": syllables, "mean_length": syllables / len(rows),
-                            "length_histogram": dict(sorted(lengths.items())), "error_types": dict(types)}
+                            "length_histogram": dict(sorted(lengths.items())),
+                            "error_types": dict(types)}
         path = self.root / "data/synthetic/train.jsonl"
         augmentation = Counter(row.get("noise_type", "unknown") for row in read_rows(path)) if path.is_file() else {}
         return {"source": VSEC_SOURCE, "raw_sha256": manifest["raw_sha256"], "seed": manifest["seed"],
@@ -97,8 +114,9 @@ class WebsiteData:
         if filters.get("random") == "1" and rows:
             rows = [random.choice(rows)]
         limit = max(1, min(100, int(filters.get("limit", 12))))
+        offset = max(0, int(filters.get("offset", 0))) if not selected_id and filters.get("random") != "1" else 0
         result = []
-        for row in rows[:limit]:
+        for row in rows[offset:offset + limit]:
             item = {**row, "types": list(self.by_type.get(row["id"], {}))}
             if selected_id or filters.get("random") == "1":
                 raw = self.raw_rows.get(row["id"], {})
@@ -107,12 +125,14 @@ class WebsiteData:
             if filters.get("tokenize") == "1" and selected_id:
                 item["tokenization"] = self.tokenization(row)
             result.append(item)
-        return {"split": name, "matched": len(rows), "samples": result}
+        return {"split": name, "matched": len(rows), "offset": offset, "limit": limit, "samples": result}
 
     @cached_property
     def demo_tokenizer(self):
         from transformers import AutoTokenizer
-        path = self.root / "checkpoints/vit5_spelling_corrector/best_model"
+        local = self.root / "vit5-base"
+        legacy = self.root / "checkpoints/vit5_spelling_corrector/best_model"
+        path = local if (local / "spiece.model").is_file() else legacy
         source = str(path) if path.is_dir() else "VietAI/vit5-base"
         return AutoTokenizer.from_pretrained(source, local_files_only=True)
 
@@ -123,7 +143,9 @@ class WebsiteData:
             for field, text in (("input", "spelling: " + row["input_text"]), ("target", row["target_text"])):
                 ids = tokenizer.encode(text)
                 groups[field] = {"tokens": tokenizer.convert_ids_to_tokens(ids), "ids": ids}
-            return {"tokenizer": "ViT5 SentencePiece", **groups}
+            path = Path(tokenizer.name_or_path)
+            source = path.relative_to(self.root).as_posix() if path.is_relative_to(self.root) else tokenizer.name_or_path
+            return {"tokenizer": "ViT5 SentencePiece", "source": source, **groups}
         except (OSError, ImportError, ValueError) as exc:
             return {"error": f"Chưa nạp được tokenizer ViT5: {exc}"}
 
@@ -160,23 +182,12 @@ class WebsiteData:
                 "baseline_vsec_source": "Train. Ngữ liệu bổ sung được lọc theo khóa nội dung VSEC."}
 
     def near_matches(self, splits):
-        # Compare sentences that share a 5-token edge. Exact overlap is checked separately.
-        index = defaultdict(list)
-        findings = set()
-        for name, rows in splits.items():
-            for row in rows:
-                text = text_key(row["target_text"])
-                words = text.split()
-                if len(words) < 8:
-                    continue
-                edges = {tuple(words[:5]), tuple(words[-5:])}
-                for edge in edges:
-                    for old_name, old_id, previous in index[edge]:
-                        if old_name != name and text != previous and Levenshtein.normalized_similarity(text, previous) >= .9:
-                            findings.add((old_id, row["id"]))
-                    index[edge].append((name, row["id"], text))
+        membership = {row["id"]: name for name, rows in splits.items() for row in rows}
+        findings = [pair for pair in near_pairs((row for rows in splits.values() for row in rows), text_key)
+                    if membership[pair[0]] != membership[pair[1]]]
         return {"method": "Chung 5 âm tiết đầu hoặc cuối, tương đồng ký tự từ 90%",
-                "pairs": len(findings), "examples": sorted(findings)[:10]}
+                "pairs": len(findings), "examples": findings[:10],
+                "grouped_at_preparation": self.service.manifest.get("near_grouped", [])}
 
     def experiments(self):
         train_hash = self.service.manifest["splits"]["train"]["sha256"]
